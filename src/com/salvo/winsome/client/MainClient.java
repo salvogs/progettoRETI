@@ -16,7 +16,12 @@ public class MainClient {
 
 //        int port = Integer.parseInt(args[0]);
 
-        client = new WSClient();
+        client = new WSClient("localhost",6789,"REGISTRATION-SERVICE");
+
+
+
+
+
         BufferedReader br = new BufferedReader(new InputStreamReader(System.in)); // TODO: cambiare con scanner?
         String input = null;
 
@@ -28,6 +33,8 @@ public class MainClient {
                 System.err.println(e.getMessage());
                 System.exit(-1);
             }
+
+
 
             decodeAndRunCommand(input.trim());
 
@@ -107,6 +114,7 @@ public class MainClient {
                             break;
 
                         case "login" :
+                            client.login("aa","dsddf");
                             // TODO
                             break;
 

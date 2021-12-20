@@ -1,4 +1,4 @@
-package com.salvo.winsome.server;
+package com.salvo.winsome;
 
 /**
  * @author Salvatore Guastella

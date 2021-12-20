@@ -6,7 +6,7 @@ import java.rmi.RemoteException;
 /**
  * @author Salvatore Guastella
  */
-public interface WSInterface extends Remote {
+public interface RMIServerInterface extends Remote {
 
 
     /**
@@ -18,5 +18,9 @@ public interface WSInterface extends Remote {
      * @throws RemoteException
      */
     int registerUser(String username, String password, String[] tags) throws RemoteException;
+
+    void registerForCallback(RMIClientInterface client) throws RemoteException;
+
+    void unregisterForCallback(RMIClientInterface client) throws RemoteException;
 
 }
