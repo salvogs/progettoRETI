@@ -1,14 +1,17 @@
 package com.salvo.winsome.client;
 
+import com.fasterxml.jackson.core.JsonEncoding;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.salvo.winsome.RMIClientInterface;
 import com.salvo.winsome.RMIServerInterface;
-import com.salvo.winsome.WSUser;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.Socket;
+import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
-import java.rmi.AccessException;
 import java.rmi.NotBoundException;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
@@ -16,7 +19,6 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.SocketHandler;
 
 
 /**
@@ -86,7 +88,30 @@ public class WSClient {
     public int login(String username, String password) {
 
         // implement login TODO
+        String s = "login " + username + password;
+        int l = s.length();
 
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        JsonFactory factory = new JsonFactory();
+        try (JsonGenerator generator =
+                     factory.createGenerator(stream, JsonEncoding.UTF8)) {
+            generator.useDefaultPrettyPrinter();
+//            generator.setCodec(new ObjectMapper());
+
+            generator.writeStartObject();
+            generator.writeStringField("username",username);
+            generator.writeStringField("password",password);
+            generator.writeEndObject();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        try {
+            writeRequest(stream.toByteArray(),stream.size());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
         this.clientCallback = new RMIClient(followers,"SUGO USER");
 
@@ -137,6 +162,40 @@ public class WSClient {
     }
 
 
+
+    private void writeRequest(byte[] request, int size) throws IllegalArgumentException, IOException{
+
+        if(request == null || size != request.length)
+            throw new IllegalArgumentException();
+
+
+        ByteBuffer length = ByteBuffer.allocate(Integer.BYTES);
+        length.putInt(size);
+        length.flip();
+
+        // scrivo la prima parte del messaggio (dimensione messaggio) sul channel
+        while(length.hasRemaining())
+            socket.write(length);
+
+
+        ByteBuffer req = ByteBuffer.wrap(request);
+
+        // scrivo la seconda parte del messaggio (la richiesta vera e propria) sul channel
+
+        while(req.hasRemaining()){
+            socket.write(req);
+        }
+
+//        length.clear();
+
+
+
+    }
+
+
+    private void readResponse() {
+
+    }
 
 
 

@@ -2,13 +2,10 @@ package com.salvo.winsome.server;
 
 import com.salvo.winsome.RMIClientInterface;
 import com.salvo.winsome.RMIServerInterface;
-import com.salvo.winsome.WSUser;
 
 import java.rmi.RemoteException;
-import java.rmi.registry.LocateRegistry;
-import java.rmi.registry.Registry;
 import java.rmi.server.RemoteServer;
-import java.rmi.server.UnicastRemoteObject;
+import java.util.ArrayList;
 import java.util.HashMap;
 
 /**
@@ -18,9 +15,11 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
 
     private HashMap<String,WSUser> registeredUser;
 
+    private HashMap<String, ArrayList<WSUser>> allTags;
 
     public RMIServer(HashMap<String,WSUser> registeredUser) {
         this.registeredUser = registeredUser;
+        this.allTags = new HashMap<>();
     }
 
 
@@ -28,7 +27,7 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
     @Override
     public int registerUser(String username, String password, String[] tags) throws RemoteException {
 
-        // controllo se l'username != null e se esiste un utente con lo stesso username
+        // controllo se l'username != null o se esiste un utente con lo stesso username
         if(username == null || registeredUser.containsKey(username))
             return -1;
 
@@ -46,15 +45,40 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
 
         System.out.println("Registrato nuovo utente: \n username: "+username+"\n password: "+password+"\nlista tag: ");
 
-        for (String s : tags)
+        for (String s : tags){
+            ArrayList<WSUser> tagUser;
+            if((tagUser = allTags.get(s)) != null) { // esiste almeno un utente registrato con il tag s
+
+                // aggiungo il nuovo utente alla lista degli utenti associati al tag
+                tagUser.add(newUser);
+
+            }else{
+                // nuova entry
+                allTags.put(s,new ArrayList<>());
+            }
+
+
             System.out.println(s);
+        }
 
         return 0;
     }
 
     @Override
-    public void registerForCallback(RMIClientInterface client) throws RemoteException {
+    public int registerForCallback(RMIClientInterface client) throws RemoteException {
+
+        String username = client.getUsername();
+
+        WSUser user = registeredUser.get(username);
+
+        if(user == null)
+            return -1;
+
+        user.setRemoteClient(client);
+
         System.out.println("registrato "+client.getUsername());
+
+        return 0;
     }
 
     @Override

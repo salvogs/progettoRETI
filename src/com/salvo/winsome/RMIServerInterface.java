@@ -19,7 +19,7 @@ public interface RMIServerInterface extends Remote {
      */
     int registerUser(String username, String password, String[] tags) throws RemoteException;
 
-    void registerForCallback(RMIClientInterface client) throws RemoteException;
+    int registerForCallback(RMIClientInterface client) throws RemoteException;
 
     void unregisterForCallback(RMIClientInterface client) throws RemoteException;
 
