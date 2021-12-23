@@ -17,9 +17,9 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
 
     private HashMap<String, ArrayList<WSUser>> allTags;
 
-    public RMIServer(HashMap<String,WSUser> registeredUser) {
+    public RMIServer(HashMap<String,WSUser> registeredUser, HashMap<String,ArrayList<WSUser>> allTags) {
         this.registeredUser = registeredUser;
-        this.allTags = new HashMap<>();
+        this.allTags = allTags;
     }
 
 
@@ -82,7 +82,16 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
     }
 
     @Override
-    public void unregisterForCallback(RMIClientInterface client) throws RemoteException {
+    public int unregisterForCallback(String username) throws RemoteException {
 
+        WSUser user = registeredUser.get(username);
+
+        if(user == null)
+            return -1;
+
+        user.setRemoteClient(null);
+        user.setLogged(false);
+
+        return 0;
     }
 }

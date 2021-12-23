@@ -1,14 +1,13 @@
 package com.salvo.winsome.client;
 
-import com.fasterxml.jackson.core.JsonEncoding;
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.salvo.winsome.RMIClientInterface;
 import com.salvo.winsome.RMIServerInterface;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
@@ -18,6 +17,7 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.HashSet;
 import java.util.concurrent.ConcurrentHashMap;
 
 
@@ -26,20 +26,25 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class WSClient {
 
-    private String loginName;
-    private ConcurrentHashMap<String,String> followers;
+    private String loginUsername;
+    private HashSet<String> followers;
     private RMIClient clientCallback;
 
     private RMIServerInterface remoteServer;
 
     private SocketChannel socket;
 
+    ByteArrayOutputStream requestStream;
+    JsonGenerator generator;
+
+    JsonFactory jfactory;
+
 
 
     public WSClient(String registryAddr, int registryPort, String serviceName) {
 
-        this.loginName = null;
-        this.followers = new ConcurrentHashMap<String, String>();
+        this.loginUsername = null;
+        this.followers = new HashSet<String>();
 
 
         try {
@@ -63,12 +68,22 @@ public class WSClient {
             System.out.println("Connessione stabilita con il server - localhost:9000");
 
 
+            requestStream = new ByteArrayOutputStream();
+            this.jfactory = new JsonFactory();
+            this.generator = jfactory.createGenerator(requestStream, JsonEncoding.UTF8);
+            this.generator.useDefaultPrettyPrinter();
+
+
+
+
         } catch (NotBoundException e) {
             System.err.println("ERRORE: Nessuna corrispondenza sul registry per "+serviceName);
             System.exit(-1);
         } catch (RemoteException e) {
             e.printStackTrace();
             System.exit(-1);
+        } catch (IOException ex) {
+            ex.printStackTrace();
         }
     }
 
@@ -88,30 +103,33 @@ public class WSClient {
     public int login(String username, String password) {
 
         // implement login TODO
-        String s = "login " + username + password;
-        int l = s.length();
+        try {
 
-        ByteArrayOutputStream stream = new ByteArrayOutputStream();
-        JsonFactory factory = new JsonFactory();
-        try (JsonGenerator generator =
-                     factory.createGenerator(stream, JsonEncoding.UTF8)) {
-            generator.useDefaultPrettyPrinter();
-//            generator.setCodec(new ObjectMapper());
+    //            generator.setCodec(new ObjectMapper());
 
             generator.writeStartObject();
+            generator.writeStringField("request-type","login");
             generator.writeStringField("username",username);
             generator.writeStringField("password",password);
             generator.writeEndObject();
+            generator.flush();
+            byte[] request = requestStream.toByteArray();
+            System.out.println(requestStream.toString());
+            writeRequest(request,request.length);
+
+            requestStream.reset();
+
+            // leggo risposta del server
+
+            String response = getResponse();
+
+
 
         } catch (IOException e) {
             e.printStackTrace();
         }
 
-        try {
-            writeRequest(stream.toByteArray(),stream.size());
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+
 
         this.clientCallback = new RMIClient(followers,"SUGO USER");
 
@@ -124,6 +142,8 @@ public class WSClient {
 
             remoteServer.registerForCallback(stub);
 
+
+
         } catch (RemoteException e) {
             e.printStackTrace();
         }
@@ -133,9 +153,49 @@ public class WSClient {
         return 0;
     }
 
-    public int logout() {
-        return 0;
+    public void logout() {
+
+        if(loginUsername == null){
+            System.err.println("Effettua il login prima di disconnetterti");
+            return;
+        }
+
+        try {
+
+            //            generator.setCodec(new ObjectMapper());
+
+            generator.writeStartObject();
+            generator.writeStringField("request-type","logout");
+            generator.writeStringField("username",loginUsername);
+            generator.writeEndObject();
+            generator.flush();
+            byte[] request = requestStream.toByteArray();
+            requestStream.reset();
+            System.out.println(requestStream.toString());
+            writeRequest(request,request.length);
+
+            String response = getResponse();
+
+
+//            if(getResponseCode() == HttpURLConnection.HTTP_OK) {
+//                remoteServer.unregisterForCallback(loginUsername);
+//                loginUsername = null;
+//                System.out.println("Logout effettuato con successo");
+//            }else{
+//
+//            }
+
+
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+
+
     }
+
+
 
     public int listFollowers() {
         return 0;
@@ -169,6 +229,7 @@ public class WSClient {
             throw new IllegalArgumentException();
 
 
+
         ByteBuffer length = ByteBuffer.allocate(Integer.BYTES);
         length.putInt(size);
         length.flip();
@@ -192,11 +253,50 @@ public class WSClient {
 
     }
 
+    private String getResponse() throws IOException {
+        ByteBuffer length = ByteBuffer.allocate(Integer.BYTES);
 
-    private void readResponse() {
+
+        // leggo prima parte payload [length]
+
+        socket.read(length);
+        length.flip();
+        int res_l = length.getInt();
+
+
+        ByteBuffer response = ByteBuffer.allocate(res_l);
+
+        socket.read(response);
+
+
+        String res = new String(response.array());
+
+        System.out.println(res);
+
+        return res;
 
     }
 
+
+
+//    private int
+//
+//        JsonParser parser = jfactory.createParser(res);
+//
+//        int resCode = 0;
+//
+//        while(parser.nextToken() != JsonToken.END_OBJECT) {
+//            String name = parser.getCurrentName();
+//            if ("response-code".equals(name)) {
+//                parser.nextToken();
+//                resCode = parser.getIntValue();
+//            }else if ("".equals(name)) {
+//                parser.nextToken();
+//                resCode = parser.getIntValue();
+//            }
+//        }
+//
+//    }
 
 
 

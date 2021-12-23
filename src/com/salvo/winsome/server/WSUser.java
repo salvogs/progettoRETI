@@ -2,8 +2,10 @@ package com.salvo.winsome.server;
 
 import com.salvo.winsome.RMIClientInterface;
 
+import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 
 /**
  * @author Salvatore Guastella
@@ -15,11 +17,11 @@ public class WSUser {
     private String[] tags;
 
     private boolean logged;
-
-    private HashMap<String,String> follower;
-    private HashMap<String,String> followed;
-
     private RMIClientInterface remoteClient;
+
+    private HashSet<String> follower;
+    private HashSet<String> followed;
+
 
     /**
      * nuovo utente
@@ -32,9 +34,10 @@ public class WSUser {
         this.password = password;
         this.tags = tags;
         this.logged = false;
+        this.remoteClient = null;
 
-        this.follower = new HashMap<>();
-        this.followed = new HashMap<>();
+        this.follower = new HashSet<>();
+        this.followed = new HashSet<>();
     }
 
 
@@ -42,20 +45,67 @@ public class WSUser {
         this.remoteClient = remoteClient;
     }
 
+    // il server invia TUTTI i follower
+    public void setFollowers(HashSet<String> users) throws RemoteException {
+        remoteClient.setFollowers(users);
+    }
+
+    // notifica quando l'utente ha un nuovo follower
+    public void notifyNewFollow(String user) throws RemoteException {
+        remoteClient.newFollow(user);
+    }
+
+    public void notifyNewUnfollow(String user) throws RemoteException {
+        remoteClient.newUnfollow(user);
+    }
 
 
-    public int addFollower(String username) {
-        if(follower.putIfAbsent(username,username) != null)
-            return -1;
+    public void setLogged(boolean b) {
+        this.logged = b;
+    }
+
+    public boolean alreadyLogged(){
+        return this.logged;
+    };
+
+    public String getUsername() {
+        return username;
+    }
+
+    public String[] getTags() {
+        return tags;
+    }
 
 
-        return 0;
+    public HashSet<String> getFollowers() {
+        return follower;
+    }
 
+    public HashSet<String> getFollowed() {
+        return followed;
+    }
+
+    public boolean checkPassword(String password){
+        return this.password.equals(password) ? true : false;
     }
 
     public void addFollowed(String username) {
-
+        followed.add(username);
     }
+
+    public void addFollower(String username) {
+        follower.add(username);
+    }
+
+    public void removeFollowed(String username) {
+        followed.remove(username);
+    }
+
+    public void removeFollower(String username) {
+        follower.remove(username);
+    }
+
+
 
 
 }

@@ -21,6 +21,6 @@ public interface RMIServerInterface extends Remote {
 
     int registerForCallback(RMIClientInterface client) throws RemoteException;
 
-    void unregisterForCallback(RMIClientInterface client) throws RemoteException;
+    int unregisterForCallback(String username) throws RemoteException;
 
 }

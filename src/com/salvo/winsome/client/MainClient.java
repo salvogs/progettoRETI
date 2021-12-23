@@ -48,9 +48,7 @@ public class MainClient {
 
         switch (input) {
             case "logout" :
-                // TODO
-                break;
-
+                client.logout();
             case "list users" :
                 // TODO
                 break;
@@ -114,8 +112,8 @@ public class MainClient {
                             break;
 
                         case "login" :
-                            client.login("aa","dsddf");
                             // TODO
+                            client.login("admin","password");
                             break;
 
                         case "follow" :
