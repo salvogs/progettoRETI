@@ -1,6 +1,7 @@
 package com.salvo.winsome.server;
 
 import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -9,6 +10,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * @author Salvatore Guastella
@@ -22,7 +25,7 @@ public class RequestHandler implements Runnable{
 
     private String request;
     private Selector selector;
-    private SelectionKey key;
+    private SelectionKey key; // todo passare solo channel?
     JsonFactory jfactory = new JsonFactory();
     JsonParser parser ;
     ByteArrayOutputStream responseStream;
@@ -47,6 +50,7 @@ public class RequestHandler implements Runnable{
         responseStream = new ByteArrayOutputStream();
         this.generator = jfactory.createGenerator(responseStream, JsonEncoding.UTF8);
         this.generator.useDefaultPrettyPrinter();
+        this.generator.setCodec(new ObjectMapper()); // per la serializzazione di oggetti
 
     }
 
@@ -72,15 +76,22 @@ public class RequestHandler implements Runnable{
                                     String password = parseNextTextField("password");
                                     if(password != null){
 
-
-
-
                                         // todo login
 
-                                        // invio risposta
+                                        int resCode;
+
+                                        SocketChannel clientChannel = (SocketChannel) key.channel();
+
+                                        if(server.login(username,password,clientChannel.getRemoteAddress().hashCode()) == 0)
+                                            resCode = HttpURLConnection.HTTP_OK;
+                                        else
+                                            resCode = HttpURLConnection.HTTP_UNAUTHORIZED;
 
                                         generator.writeStartObject();
-                                        generator.writeNumberField("response-code", HttpURLConnection.HTTP_OK);
+
+                                        generator.writeNumberField("response-code", resCode);
+
+
                                         generator.writeEndObject();
 
                                         generator.flush();
@@ -98,13 +109,131 @@ public class RequestHandler implements Runnable{
 
                                 String username;
                                 if((username = parseNextTextField("username")) != null){
-                                    System.out.println("SUGOOOOOOOOOO");
+
+                                    int resCode;
+                                    // todo logout
+                                    if(server.logout(username) == 0)
+                                        resCode = HttpURLConnection.HTTP_OK;
+                                    else
+                                        resCode = HttpURLConnection.HTTP_UNAUTHORIZED;
+
+                                    generator.writeStartObject();
+
+                                    generator.writeNumberField("response-code", resCode);
+
+                                    generator.writeEndObject();
+
+                                    generator.flush();
                                 }
-                                // todo logout
+
+                                break;
 
                             }
 
+                            case "follow": {
+                                String username = parseNextTextField("username");
+                                if(username != null) {
+
+
+                                    String toFollow = parseNextTextField("to-follow");
+                                    if (toFollow != null) {
+
+                                        int ret = server.followUser(username,toFollow);
+                                        int resCode = 0;
+                                        if(ret == 0)
+                                            resCode = HttpURLConnection.HTTP_OK;
+                                        else if(ret == -1)
+                                            resCode = HttpURLConnection.HTTP_NOT_FOUND;
+                                        else if(ret == -2)
+                                            resCode = HttpURLConnection.HTTP_FORBIDDEN; // azione rifiutata
+
+
+                                        generator.writeStartObject();
+
+                                        generator.writeNumberField("response-code", resCode);
+
+                                        generator.writeEndObject();
+
+                                        generator.flush();
+                                    }
+                                }
+                            }
                                 break;
+
+                            case "unfollow": {
+                                String username = parseNextTextField("username");
+                                if(username != null) {
+
+
+                                    String toUnfollow = parseNextTextField("to-unfollow");
+                                    if (toUnfollow != null) {
+
+                                        int ret = server.unfollowUser(username,toUnfollow);
+                                        int resCode = 0;
+                                        if(ret == 0)
+                                            resCode = HttpURLConnection.HTTP_OK;
+                                        else if(ret == -1)
+                                            resCode = HttpURLConnection.HTTP_NOT_FOUND;
+                                        else if(ret == -2)
+                                            resCode = HttpURLConnection.HTTP_FORBIDDEN; // azione rifiutata
+
+
+                                        generator.writeStartObject();
+
+                                        generator.writeNumberField("response-code", resCode);
+
+                                        generator.writeEndObject();
+
+                                        generator.flush();
+                                    }
+                                }
+                            }
+
+                                break;
+
+                            case "list-users":{
+                                String username = parseNextTextField("username");
+                                if(username != null) {
+                                    HashMap<String, String[]> selectedUsers = server.listUsers(username);
+
+                                    generator.writeObject(selectedUsers);
+                                    generator.flush();
+//                                    for (Map.Entry<String, String[]> entry : selectedUsers.entrySet()) {
+//                                        String utente = entry.getKey();
+//                                        String[] tags = entry.getValue();
+//                                        System.out.print(utente + " ");
+//
+//                                        for (String tag : tags)
+//                                            System.out.print(tag + ",");
+//
+//
+//                                    }
+                                }
+                            }
+                                break;
+
+                            case "list-following":{
+                                String username = parseNextTextField("username");
+                                if(username != null) {
+                                    HashMap<String, String[]> followed = server.listFollowing(username);
+
+                                    generator.writeObject(followed);
+                                    generator.flush();
+
+                                }
+                            }
+                                break;
+                            case "create-post":{
+                                String username = parseNextTextField("username");
+
+                                String title = parseNextTextField("title");
+
+                                String content = parseNextTextField("content");
+
+
+                            }
+
+                            break;
 
                             default: break;
 

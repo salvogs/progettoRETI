@@ -19,9 +19,14 @@ public class WSUser {
     private boolean logged;
     private RMIClientInterface remoteClient;
 
+    private int sessionId;
+
+
     private HashSet<String> follower;
     private HashSet<String> followed;
 
+
+    private HashSet<Integer> blog; //salvo gli id dei post creati dall'utente
 
     /**
      * nuovo utente
@@ -34,10 +39,16 @@ public class WSUser {
         this.password = password;
         this.tags = tags;
         this.logged = false;
+
+        this.sessionId = -1;
+
         this.remoteClient = null;
 
         this.follower = new HashSet<>();
         this.followed = new HashSet<>();
+
+        this.blog = new HashSet<>();
+
     }
 
 
@@ -45,14 +56,14 @@ public class WSUser {
         this.remoteClient = remoteClient;
     }
 
-    // il server invia TUTTI i follower
-    public void setFollowers(HashSet<String> users) throws RemoteException {
-        remoteClient.setFollowers(users);
-    }
+//    // il server invia TUTTI i follower
+//    public void setFollowers(HashSet<String> users) throws RemoteException {
+//        remoteClient.setFollowers(users);
+//    }
 
     // notifica quando l'utente ha un nuovo follower
-    public void notifyNewFollow(String user) throws RemoteException {
-        remoteClient.newFollow(user);
+    public void notifyNewFollow(String user, String[] tags) throws RemoteException {
+        remoteClient.newFollow(user,tags);
     }
 
     public void notifyNewUnfollow(String user) throws RemoteException {
@@ -105,7 +116,31 @@ public class WSUser {
         follower.remove(username);
     }
 
+    public void newPost(Post p) {
+        blog.add(p.getId());
+    }
 
 
+    /**
+     * controlla se il post e' stato creato dall'utente
+     * (quindi se appartiene al suo blog) e lo cancella
+     *
+     * @return true se il post e' stato cancellato con successo, false altrimenti
+     */
+    public boolean deletePost(int id) {
+        if(blog.remove(id) == true)
+            return true;
 
+        return false;
+
+    }
+
+
+    public void setSessionId(int sessionId) {
+        this.sessionId = sessionId;
+    }
+
+    public int getSessionId() {
+        return sessionId;
+    }
 }

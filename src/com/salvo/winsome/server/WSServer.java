@@ -1,6 +1,7 @@
 package com.salvo.winsome.server;
 
 import com.salvo.winsome.RMIServerInterface;
+import javafx.geometry.Pos;
 
 import java.io.IOException;
 import java.lang.reflect.Array;
@@ -40,11 +41,16 @@ public class WSServer {
 
     Object lock = new Object();
 
+    private HashMap<Integer, Post> posts;
+    private int idPostCounter = 0;
+
+
     public WSServer() {
         this.registeredUser = new HashMap<>();
         this.allTags = new HashMap<>();
         this.remoteServer = new RMIServer(registeredUser,allTags);
         this.pool = (ThreadPoolExecutor) Executors.newFixedThreadPool(N_THREAD);
+        this.posts = new HashMap<Integer, Post>();
     }
 
     public void start() {
@@ -228,21 +234,24 @@ public class WSServer {
 
 
 
-    public int login(String username, String password) throws IllegalArgumentException {
+    public int login(String username, String password, int sessionId) throws IllegalArgumentException {
         if(username == null || password == null)
             throw new IllegalArgumentException();
 
         WSUser user = registeredUser.get(username);
 
-        if(user == null || user.checkPassword(password))
+        if(user == null || !user.checkPassword(password))
             return -1;
 
-        if(user.alreadyLogged())
+
+        if(user.alreadyLogged()) { // todo controllare sessionId
             return -2;
+        }
 
         // aggiungere agli utenti loggati per invio ricompense
 
         user.setLogged(true);
+        user.setSessionId(sessionId);
 
         return 0;
 
@@ -259,13 +268,15 @@ public class WSServer {
            return -1;
 
         user.setLogged(false);
+        user.setSessionId(-1);
 
+        user.setRemoteClient(null);
         return 0;
 
     }
 
 
-    public String[] listUsers(String username) throws IllegalArgumentException {
+    public HashMap<String,String[]> listUsers(String username) throws IllegalArgumentException {
         if(username == null)
             throw new IllegalArgumentException();
 
@@ -279,7 +290,7 @@ public class WSServer {
         // se l'utente si e' registrato senza specificare tag
         if(tags.length == 0) return null;
 
-        HashSet<String> selectedUsers = new HashSet<>();
+        HashMap<String,String[]> selectedUsers = new HashMap<>();
 
         for(String tag : tags) {
 
@@ -287,21 +298,38 @@ public class WSServer {
             ArrayList<WSUser> users = allTags.get(tag);
 
             for(WSUser u : users){
-                selectedUsers.add(u.getUsername());
+                if(!u.getUsername().equals(username))
+                    selectedUsers.put(u.getUsername(),u.getTags());
             }
 
         }
 
-        return selectedUsers.isEmpty() ? null : (String[]) selectedUsers.toArray();
+        return selectedUsers.isEmpty() ? null : selectedUsers;
 
 
     }
 
 
-    /**
-     * @return i follower di @username sotto forma di String[]
-     */
-    public String[] listFollowers(String username) throws IllegalArgumentException {
+//    /**
+//     * @return i follower di @username sotto forma di String[]
+//     */
+//    public String[] listFollowers(String username) throws IllegalArgumentException {
+//        if(username == null)
+//            throw new IllegalArgumentException();
+//
+//        WSUser user = registeredUser.get(username);
+//
+//        if(user == null || !user.alreadyLogged())
+//            return null;
+//
+//        HashSet<String> followers = user.getFollowers();
+//
+//
+//        return followers.isEmpty() ? null : (String[]) followers.toArray();
+//
+//    }
+
+    public HashMap<String,String[]> listFollowing(String username) throws IllegalArgumentException {
         if(username == null)
             throw new IllegalArgumentException();
 
@@ -309,29 +337,19 @@ public class WSServer {
 
         if(user == null || !user.alreadyLogged())
             return null;
-
-        HashSet<String> followers = user.getFollowers();
-
-
-        return followers.isEmpty() ? null : (String[]) followers.toArray();
-
-    }
-
-    public String[] listFollowing(String username) throws IllegalArgumentException {
-        if(username == null)
-            throw new IllegalArgumentException();
-
-        WSUser user = registeredUser.get(username);
-
-        if(user == null || !user.alreadyLogged())
-            return null;
-
         HashSet<String> followed = user.getFollowed();
 
         if(followed.isEmpty())
             return null;
 
-        return followed.isEmpty() ? null : (String[]) followed.toArray();
+        HashMap<String,String[]> toRet = new HashMap<>();
+
+        for(String u : followed) {
+            toRet.put(u,registeredUser.get(u).getTags());
+        }
+
+
+        return toRet;
 
     }
 
@@ -340,25 +358,28 @@ public class WSServer {
         if(username == null || toFollow == null)
             throw new IllegalArgumentException();
 
-        if(username.equals(toFollow))
-            return -1;
 
         WSUser user = registeredUser.get(username);
         WSUser userToFollow = registeredUser.get(toFollow);
 
-        if(user == null || userToFollow == null)
-            return -2;
+        if(user == null || userToFollow == null) {
+            return -1;
+        }
 
         // segue gia' quell'utente
-       if(user.getFollowed().contains(toFollow)) // todo potrei fragarmene
-           return -3;
+        if(user.getFollowed().contains(toFollow) || username.equals(toFollow))
+        {
+            return -2;
+        }
+
 
 
         user.addFollowed(toFollow);
         userToFollow.addFollower(username);
 
         try {
-            userToFollow.notifyNewFollow(username);
+            if(userToFollow.getSessionId() != -1)
+                userToFollow.notifyNewFollow(username,user.getTags());
         } catch (RemoteException e) {
             e.printStackTrace();  // todo client termination
         }
@@ -371,34 +392,83 @@ public class WSServer {
         if(username == null || toUnfollow == null)
             throw new IllegalArgumentException();
 
-        if(username.equals(toUnfollow))
-            return -1;
 
         WSUser user = registeredUser.get(username);
         WSUser userToUnfollow = registeredUser.get(toUnfollow);
 
-        if(user == null || userToUnfollow == null)
-            return -2;
+        if(user == null || userToUnfollow == null) {
+            return -1;
+        }
 
-        // NON segue quell'utente
-        if(!user.getFollowed().contains(toUnfollow)) // todo potrei fragarmene
-            return -3;
+        if(!user.getFollowed().contains(toUnfollow) || username.equals(toUnfollow))
+        {
+            return -2;
+        }
+
 
 
         user.removeFollowed(toUnfollow);
         userToUnfollow.removeFollower(username);
 
         try {
-            userToUnfollow.notifyNewUnfollow(username);
+            if(userToUnfollow.getSessionId() != -1)
+                userToUnfollow.notifyNewUnfollow(username);
         } catch (RemoteException e) {
-            e.printStackTrace(); // todo client termination
+            e.printStackTrace();  // todo client termination
         }
 
         return 0;
     }
 
 
+    public int createPost(String username, String title, String content) throws IllegalArgumentException{
+        if(username == null || title == null || content == null)
+            throw new IllegalArgumentException();
 
+        WSUser user = registeredUser.get(username);
 
+        if(user == null)
+            return -1;
+
+        int id = idPostCounter++;
+
+        Post p = new Post(id,title,content);
+
+        user.newPost(p);
+
+        posts.put(id,p);
+
+        return 0;
+    }
+
+    public int deletePost(String username, int id) {
+        if(username == null)
+            throw new IllegalArgumentException();
+
+        WSUser user = registeredUser.get(username);
+
+        if(user == null)
+            return -1;
+
+        if(user.deletePost(id) == false)
+            return -2;
+
+        return 0;
+
+    }
+
+//    public int addComment(String username, int id, String comment) {
+//
+//    }
+
+//    private WSUser getUser(String username) throws IllegalArgumentException{
+//        if(username == null)
+//            throw new IllegalArgumentException();
+//
+//        WSUser user = registeredUser.get(username);
+//
+//        return registeredUser.get(username);
+//
+//    }
 
 }

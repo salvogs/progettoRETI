@@ -49,16 +49,17 @@ public class MainClient {
         switch (input) {
             case "logout" :
                 client.logout();
+                break;
             case "list users" :
-                // TODO
+                client.listUsers();
                 break;
 
             case "list followers" :
-                // TODO
+                client.listFollowers();
                 break;
 
             case "list following" :
-                // TODO
+                client.listFollowing();
                 break;
 
             case "blog" :
@@ -86,42 +87,48 @@ public class MainClient {
                 try {
 
                     switch (token) {
-                        case "register" :
+                        case "register" : {
 
                             String username = st.nextToken();
                             String password = st.nextToken();
 
-                            ArrayList<String> tags = new ArrayList<>();
+                            HashSet<String> tags = new HashSet<>();
+
 
                             int tag_counter = 0;
 
-                            while(st.hasMoreTokens()){
-                                if(tag_counter == 4){
+                            while (st.hasMoreTokens()) {
+                                if (tag_counter == 5) {
                                     System.out.println("Sono stati inseriti solamente i primi 5 tag");
                                     break;
                                 }
 
                                 String tag = st.nextToken();
 
-                                tag_counter += putIfAbsent(tag,tags); // invariato se ritorna 0
+                                tag_counter += tags.add(tag) ? 1 : 0;
 
 
                             }
 
-                            client.register(username,password, (String[]) tags.toArray(new String[0]));
+                            client.register(username, password, (String[]) tags.toArray(new String[0]));
                             break;
+                        }
 
-                        case "login" :
-                            // TODO
-                            client.login("admin","password");
+                        case "login" : {
+                            String username = st.nextToken();
+                            String password = st.nextToken();
+
+                            client.login(username,password);
                             break;
-
+                        }
                         case "follow" :
-                            // TODO
+                            String toFollow = st.nextToken();
+                            client.followUser(toFollow);
                             break;
 
                         case "unfollow" :
-                            // TODO
+                            String toUnfollow = st.nextToken();
+                            client.unfollowUser(toUnfollow);
                             break;
 
                         case "post" :
@@ -174,23 +181,6 @@ public class MainClient {
 
     }
 
-
-
-/**
- * @return 1 se il tag e' nuovo, 0 altrimenti
- */
- private static int putIfAbsent(String tag, ArrayList<String> tags){
-        // controllo che non sia stato gia' inserito lo stesso tag
-        for ( String s : tags) {
-            if(s.equals(tag))
-                return 0; // non memorizzo il tag
-        }
-
-        // nuovo tag
-
-        tags.add(tag);
-        return 1;
-    }
 
 
 }

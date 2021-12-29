@@ -4,6 +4,7 @@ import com.salvo.winsome.RMIClientInterface;
 
 import java.rmi.RemoteException;
 import java.rmi.server.RemoteServer;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -13,22 +14,22 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RMIClient extends RemoteServer implements RMIClientInterface {
 
 
-    private HashSet<String> followers;
+    private HashMap<String,String[]> followers;
     private String loginUsername;
 
 
-    public RMIClient(HashSet<String> followers, String loginUsername){
+    public RMIClient(HashMap<String,String[]> followers, String loginUsername){
         this.followers = followers;
         this.loginUsername = loginUsername;
     }
 
     @Override
-    public void setFollowers(HashSet<String> users) throws RemoteException {
+    public void setFollowers(HashMap<String,String[]> users) throws RemoteException {
         followers = users;
     }
     @Override
-    public void newFollow(String user) throws RemoteException {
-        followers.add(user);
+    public void newFollow(String user,String[] tags) throws RemoteException {
+        followers.put(user,tags);
     }
     @Override
     public void newUnfollow(String user) throws RemoteException {

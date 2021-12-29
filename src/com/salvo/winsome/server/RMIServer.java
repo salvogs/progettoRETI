@@ -27,11 +27,9 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
     @Override
     public int registerUser(String username, String password, String[] tags) throws RemoteException {
 
-        // controllo se l'username != null o se esiste un utente con lo stesso username
         if(username == null || registeredUser.containsKey(username))
             return -1;
 
-        // controllo che sia stata passata una password valida
         if(password == null || password.equals(""))
             return -2;
 
@@ -54,7 +52,10 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
 
             }else{
                 // nuova entry
-                allTags.put(s,new ArrayList<>());
+                tagUser = new ArrayList<>();
+                tagUser.add(newUser);
+                allTags.put(s,tagUser);
+
             }
 
 
@@ -81,17 +82,21 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
         return 0;
     }
 
-    @Override
-    public int unregisterForCallback(String username) throws RemoteException {
+//    @Override
+//    public int unregisterForCallback(String username) throws RemoteException {
+//
+//        WSUser user = registeredUser.get(username);
+//
+//        if(user == null)
+//            return -1;
+//
+//        user.setRemoteClient(null);
+//        user.setLogged(false);
+//
+//        return 0;
+//    }
 
-        WSUser user = registeredUser.get(username);
+//    public HashMap<String,String[]> getFollowers()
 
-        if(user == null)
-            return -1;
 
-        user.setRemoteClient(null);
-        user.setLogged(false);
-
-        return 0;
-    }
 }
