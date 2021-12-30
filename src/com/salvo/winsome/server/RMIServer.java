@@ -7,6 +7,7 @@ import java.rmi.RemoteException;
 import java.rmi.server.RemoteServer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 
 /**
  * @author Salvatore Guastella
@@ -66,21 +67,50 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
     }
 
     @Override
-    public int registerForCallback(RMIClientInterface client) throws RemoteException {
+    public HashMap<String,String[]> registerForCallback(RMIClientInterface client) throws RemoteException {
 
         String username = client.getUsername();
 
         WSUser user = registeredUser.get(username);
 
         if(user == null)
-            return -1;
+            return null;
 
         user.setRemoteClient(client);
 
         System.out.println("registrato "+client.getUsername());
 
-        return 0;
+        return listFollowers(username);
     }
+
+
+    //    /**
+//     * @return i follower di @username sotto
+//     */
+    private HashMap<String, String[]> listFollowers(String username) throws IllegalArgumentException {
+        if(username == null)
+            throw new IllegalArgumentException();
+
+        WSUser user = registeredUser.get(username);
+
+        if(user == null || !user.alreadyLogged())
+            return null;
+        HashSet<String> followers = user.getFollowers();
+
+        if(followers.isEmpty())
+            return null;
+
+        HashMap<String,String[]> toRet = new HashMap<>();
+
+        for(String u : followers) {
+            toRet.put(u,registeredUser.get(u).getTags());
+        }
+
+
+        return toRet;
+    }
+
+
 
 //    @Override
 //    public int unregisterForCallback(String username) throws RemoteException {

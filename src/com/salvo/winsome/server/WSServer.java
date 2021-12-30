@@ -33,6 +33,8 @@ public class WSServer {
 
     private RMIServer remoteServer;
 
+    private HashMap<Integer,String> hashUser; // corrispondenza hash ip
+
     int N_THREAD = 10;
 
     private ThreadPoolExecutor pool;
@@ -49,6 +51,8 @@ public class WSServer {
         this.registeredUser = new HashMap<>();
         this.allTags = new HashMap<>();
         this.remoteServer = new RMIServer(registeredUser,allTags);
+        this.hashUser = new HashMap<>();
+
         this.pool = (ThreadPoolExecutor) Executors.newFixedThreadPool(N_THREAD);
         this.posts = new HashMap<Integer, Post>();
     }
@@ -141,9 +145,8 @@ public class WSServer {
 //                        }
 
                         } catch (IOException e) { // terminazione improvvisa del client
-                            System.err.println("Terminazione improvvisa client");
-                            key.channel().close(); // chiudo il channel associato alla chiave
                             key.cancel(); // tolgo la chiave dal selector
+                            disconnetionHandler((SocketChannel) key.channel());
                         }
 
                     }
@@ -194,8 +197,8 @@ public class WSServer {
 
 
         if (clientChannel.read(bba) == -1) {// controllo se il client ha chiuso la socket
-            key.channel().close();
             key.cancel();
+            disconnetionHandler((SocketChannel) key.channel());
             return;
         }
 
@@ -244,21 +247,31 @@ public class WSServer {
             return -1;
 
 
-        if(user.alreadyLogged()) { // todo controllare sessionId
+        if(user.alreadyLogged()) {
             return -2;
         }
 
-        // aggiungere agli utenti loggati per invio ricompense
+        // todo aggiungere agli utenti loggati per invio ricompense
 
         user.setLogged(true);
         user.setSessionId(sessionId);
+
+        hashUser.put(sessionId,username);
 
         return 0;
 
 
     }
 
-    public int logout(String username) throws IllegalArgumentException {
+    /**
+     *
+     * @param username
+     * @param sessionId per evitare che qualcuno tramite una
+     *                 connessione diversa possa disconnettere l'utente
+     * @return
+     * @throws IllegalArgumentException
+     */
+    public int logout(String username, int sessionId) throws IllegalArgumentException {
         if(username == null)
             throw new IllegalArgumentException();
 
@@ -267,10 +280,15 @@ public class WSServer {
         if(user == null || !user.alreadyLogged())
            return -1;
 
+        if(user.getSessionId() != sessionId)
+            return -2;
+
+        hashUser.remove(user.getSessionId());
         user.setLogged(false);
         user.setSessionId(-1);
 
         user.setRemoteClient(null);
+
         return 0;
 
     }
@@ -287,8 +305,6 @@ public class WSServer {
 
         String[] tags = user.getTags();
 
-        // se l'utente si e' registrato senza specificare tag
-        if(tags.length == 0) return null;
 
         HashMap<String,String[]> selectedUsers = new HashMap<>();
 
@@ -304,30 +320,10 @@ public class WSServer {
 
         }
 
-        return selectedUsers.isEmpty() ? null : selectedUsers;
+        return selectedUsers; // empty se non ci sono utenti in comune o l'utente si e' registrato senza tag
 
 
     }
-
-
-//    /**
-//     * @return i follower di @username sotto forma di String[]
-//     */
-//    public String[] listFollowers(String username) throws IllegalArgumentException {
-//        if(username == null)
-//            throw new IllegalArgumentException();
-//
-//        WSUser user = registeredUser.get(username);
-//
-//        if(user == null || !user.alreadyLogged())
-//            return null;
-//
-//        HashSet<String> followers = user.getFollowers();
-//
-//
-//        return followers.isEmpty() ? null : (String[]) followers.toArray();
-//
-//    }
 
     public HashMap<String,String[]> listFollowing(String username) throws IllegalArgumentException {
         if(username == null)
@@ -339,8 +335,6 @@ public class WSServer {
             return null;
         HashSet<String> followed = user.getFollowed();
 
-        if(followed.isEmpty())
-            return null;
 
         HashMap<String,String[]> toRet = new HashMap<>();
 
@@ -362,14 +356,18 @@ public class WSServer {
         WSUser user = registeredUser.get(username);
         WSUser userToFollow = registeredUser.get(toFollow);
 
-        if(user == null || userToFollow == null) {
-            return -1;
-        }
 
-        // segue gia' quell'utente
+        if(user == null || userToFollow == null)
+            return -1;
+
+
+        if(!user.alreadyLogged())
+            return -2;
+
+            // segue gia' quell'utente
         if(user.getFollowed().contains(toFollow) || username.equals(toFollow))
         {
-            return -2;
+            return -3;
         }
 
 
@@ -388,7 +386,7 @@ public class WSServer {
 
     }
 
-    public int unfollowUser(String username, String toUnfollow) {
+    public int unfollowUser(String username, String toUnfollow) throws IllegalArgumentException{
         if(username == null || toUnfollow == null)
             throw new IllegalArgumentException();
 
@@ -399,6 +397,9 @@ public class WSServer {
         if(user == null || userToUnfollow == null) {
             return -1;
         }
+
+        if(!user.alreadyLogged())
+            return -2;
 
         if(!user.getFollowed().contains(toUnfollow) || username.equals(toUnfollow))
         {
@@ -455,6 +456,25 @@ public class WSServer {
 
         return 0;
 
+    }
+
+    public void disconnetionHandler(SocketChannel channel) {
+        try {
+            System.err.println("Disconnesso client :"+channel.getRemoteAddress());
+
+            int sessionId = channel.getRemoteAddress().hashCode();
+
+            // ricavo l'username (se era loggato) dell'utente disconnesso
+            String username = hashUser.get(sessionId);
+
+            if(username != null) {
+                logout(username,sessionId);
+            }
+            channel.close(); // chiudo il channel
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
 //    public int addComment(String username, int id, String comment) {

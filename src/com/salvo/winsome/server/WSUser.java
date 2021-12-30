@@ -1,5 +1,6 @@
 package com.salvo.winsome.server;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.salvo.winsome.RMIClientInterface;
 
 import java.rmi.RemoteException;
@@ -10,6 +11,7 @@ import java.util.HashSet;
 /**
  * @author Salvatore Guastella
  */
+
 public class WSUser {
 
     private String username;
@@ -34,6 +36,7 @@ public class WSUser {
      * @param password La password
      * @param tags lista dei tag
      */
+
     public WSUser(String username, String password, String[] tags){
         this.username = username;
         this.password = password;

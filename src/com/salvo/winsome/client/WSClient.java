@@ -2,6 +2,7 @@ package com.salvo.winsome.client;
 
 import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.salvo.winsome.RMIClientInterface;
 import com.salvo.winsome.RMIServerInterface;
@@ -117,14 +118,14 @@ public class WSClient {
         try {
 
             generator.writeStartObject();
-            generator.writeStringField("request-type","login");
-            generator.writeStringField("username",username);
-            generator.writeStringField("password",password);
+            generator.writeStringField("request-type", "login");
+            generator.writeStringField("username", username);
+            generator.writeStringField("password", password);
             generator.writeEndObject();
             generator.flush();
             byte[] request = requestStream.toByteArray();
             System.out.println(requestStream.toString());
-            writeRequest(request,request.length);
+            writeRequest(request, request.length);
 
             requestStream.reset();
 
@@ -134,12 +135,16 @@ public class WSClient {
 
             int resCode = getResponseCode(response);
 
-            if(resCode == HttpURLConnection.HTTP_OK) {
+            if (resCode == HttpURLConnection.HTTP_OK) {
                 loginUsername = username;
                 System.out.println("login effettuato con successo");
-            }else if(resCode == HttpURLConnection.HTTP_UNAUTHORIZED)
-                System.err.println("login fallito: "+resCode);
 
+
+            }
+            else if (resCode == HttpURLConnection.HTTP_UNAUTHORIZED)
+                System.err.println("credenziali errate");
+            else if (resCode == HttpURLConnection.HTTP_FORBIDDEN)
+                System.err.println("c'e' un utente gia' collegato, deve essere prima scollegato");
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -156,8 +161,8 @@ public class WSClient {
 
             // mi registro per ricevere notifiche
 
-            remoteServer.registerForCallback(stub);
-
+            HashMap<String,String[]> ret = remoteServer.registerForCallback(stub); // ritorna eventuali followers
+            if(ret != null) followers = ret;
 
 
         } catch (RemoteException e) {
@@ -174,9 +179,6 @@ public class WSClient {
         }
 
         try {
-
-            //            generator.setCodec(new ObjectMapper());
-
             generator.writeStartObject();
             generator.writeStringField("request-type","logout");
             generator.writeStringField("username",loginUsername);
@@ -192,24 +194,17 @@ public class WSClient {
             int resCode = getResponseCode(response);
 
             if(resCode == HttpURLConnection.HTTP_OK) {
-
                 loginUsername = null;
-
+                followers = null;
                 System.out.println("logout effettuato con successo");
-
-
-
             }else if(resCode == HttpURLConnection.HTTP_UNAUTHORIZED)
-                System.err.println("errore logout");
-            //
-
-
+                System.err.println("accesso non eseguito");
+            else if(resCode == HttpURLConnection.HTTP_FORBIDDEN)
+                System.err.println("non e' possibile disconnettere un altro utente");
 
         } catch (IOException e) {
             e.printStackTrace();
         }
-
-
 
     }
 
@@ -220,10 +215,7 @@ public class WSClient {
             return;
         }
 
-
         try {
-
-            //            generator.setCodec(new ObjectMapper());
 
             generator.writeStartObject();
             generator.writeStringField("request-type","list-users");
@@ -238,19 +230,13 @@ public class WSClient {
 
             String response = getResponse();
 
-//            int resCode = getResponseCode(response);
+            int resCode = getResponseCode(response);
 
-//            if(resCode == HttpURLConnection.HTTP_OK) {
+            if(resCode == HttpURLConnection.HTTP_OK) {
 
-                parser = jfactory.createParser(response);
-                this.parser.setCodec(new ObjectMapper());
-                TypeReference<HashMap<String, String[]>> typeRef
-                    = new TypeReference<HashMap<String, String[]>>() {};
-
-                HashMap<String,String[]> users = parser.readValueAs(typeRef);
-
-                printUserAndTags(users);
-//            }
+                printJsonUserAndTags(response.substring(3).trim());
+            }else if(resCode == HttpURLConnection.HTTP_NOT_FOUND)
+            System.out.println("Non ci sono utenti con tag in comune");
 
 
 
@@ -260,32 +246,14 @@ public class WSClient {
 
         }
 
-    private void printUserAndTags(HashMap<String, String[]> users) {
-        System.out.println(centerString(20,"Utente")+"|"+centerString(20,"Tag"));
-
-        String line = new String(new char[40]).replace('\0', '-');
-        System.out.println(line);
-
-
-        for(Map.Entry<String,String[]> entry : users.entrySet()){
-            String utente = entry.getKey();
-            String[] tags = entry.getValue();
-
-            System.out.print(centerString(20,utente)+"|  ");
-
-            if(tags.length != 0){
-                String s = Arrays.toString(tags);
-                System.out.println(s.substring(1,s.length()-1));
-            }
-
-            System.out.println();
-
-
-        }
-    }
-
 
     public void listFollowers() {
+        if(loginUsername == null){
+            System.err.println("Effettua prima il login");
+            return;
+        }
+
+
         if(followers.isEmpty()){
             System.out.println("Non hai ancora nessun follower");
             return;
@@ -300,11 +268,7 @@ public class WSClient {
             return;
         }
 
-
         try {
-
-            //            generator.setCodec(new ObjectMapper());
-
             generator.writeStartObject();
             generator.writeStringField("request-type","list-following");
             generator.writeStringField("username",loginUsername);
@@ -315,7 +279,21 @@ public class WSClient {
             System.out.println(requestStream.toString());
             writeRequest(request,request.length);
 
-        } catch (IOException e) {
+
+            String response = getResponse();
+
+            int resCode = getResponseCode(response);
+
+            if(resCode == HttpURLConnection.HTTP_OK) {
+
+                printJsonUserAndTags(response.substring(3).trim());
+
+            }else if(resCode == HttpURLConnection.HTTP_NOT_FOUND)
+                System.out.println("Non segui ancora nessuno");
+
+
+
+            } catch (IOException e) {
             e.printStackTrace();
         }
 
@@ -350,12 +328,12 @@ public class WSClient {
 
             if(resCode == HttpURLConnection.HTTP_OK) {
                 System.out.println("Ora segui "+username);
-
-
-
             }else if(resCode == HttpURLConnection.HTTP_NOT_FOUND)
                 System.err.println("L'utente "+username+" non esiste");
-            //
+            else if(resCode == HttpURLConnection.HTTP_UNAUTHORIZED)
+                System.err.println("Accesso non eseguito");
+            else if(resCode == HttpURLConnection.HTTP_CONFLICT)
+                System.err.println("Non puoi seguire te stesso");
 
 
 
@@ -375,8 +353,6 @@ public class WSClient {
 
         try {
 
-            //            generator.setCodec(new ObjectMapper());
-
             generator.writeStartObject();
             generator.writeStringField("request-type","unfollow");
             generator.writeStringField("username",loginUsername);
@@ -387,6 +363,21 @@ public class WSClient {
             requestStream.reset();
             System.out.println(requestStream.toString());
             writeRequest(request,request.length);
+
+            String response = getResponse();
+
+            int resCode = getResponseCode(response);
+
+            if(resCode == HttpURLConnection.HTTP_OK) {
+                System.out.println("Hai smesso di seguire "+username);
+            }else if(resCode == HttpURLConnection.HTTP_NOT_FOUND)
+                System.err.println("L'utente "+username+" non esiste");
+            else if(resCode == HttpURLConnection.HTTP_UNAUTHORIZED)
+                System.err.println("Accesso non eseguito");
+            else if(resCode == HttpURLConnection.HTTP_CONFLICT)
+                System.err.println("Non puoi smettere di seguire te stesso");
+
+
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -463,37 +454,25 @@ public class WSClient {
 
 
     private int getResponseCode(String response) throws IOException {
-        parser = jfactory.createParser(response);
 
-        while (parser.nextToken() != JsonToken.END_OBJECT) {
-            String fieldname = parser.getCurrentName();
-            if ("response-code".equals(fieldname)) {
-                parser.nextToken();
-                return parser.getIntValue();
+        StringTokenizer s = new StringTokenizer(response); // default delimiter
+
+        try {
+            int resCode = Integer.parseInt(s.nextToken());
+
+            if(resCode == HttpURLConnection.HTTP_BAD_REQUEST) {
+                System.err.println(resCode+": BAD_REQUEST");
+                System.exit(-1);
             }
 
+
+            return resCode;
+
+        } catch (NoSuchElementException e){
+            return -1;
         }
 
-        return -1;
-
     }
-
-
-
-
-
-
-    private String parseNextTextField(String fieldName) throws IOException{
-        if(parser.nextToken() != null && parser.getCurrentName().equals(fieldName)) {
-            parser.nextToken();
-            System.out.println(parser.getText());
-            return parser.getText();
-        }
-
-        return null;
-    }
-
-
 
 
     private String centerString (int width, String s) {
@@ -501,6 +480,66 @@ public class WSClient {
     }
 
 
+    private void printUserAndTags(HashMap<String,String[]> users) {
+
+        System.out.println(centerString(20,"Utente")+"|"+centerString(20,"Tag"));
+        String line = new String(new char[40]).replace('\0', '-');
+        System.out.println(line);
+
+
+        for(Map.Entry<String,String[]> entry : users.entrySet()){
+            String username = entry.getKey();
+            String[] tags = entry.getValue();
+
+            System.out.print(centerString(20,username)+"|  ");
+
+            if(tags.length != 0){
+                String s = Arrays.toString(tags);
+                System.out.print(s.substring(1,s.length()-1));
+            }
+
+            System.out.println();
+        }
+
+    }
+
+    private void printJsonUserAndTags(String response) {
+
+        System.out.println(centerString(20,"Utente")+"|"+centerString(20,"Tag"));
+
+        String line = new String(new char[40]).replace('\0', '-');
+        System.out.println(line);
+
+        ObjectMapper mapper = new ObjectMapper();
+
+        JsonNode users = null;
+        try {
+            users = mapper.readTree(response);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+//        System.out.println(users);
+
+        if(users.isArray()) {
+            for(JsonNode user : users) {
+                String username = user.get("username").asText();
+                System.out.print(centerString(20,username)+"|  ");
+                JsonNode tags = user.get("tags");
+                if(tags.isArray() && tags.size() != 0 ){
+//                    System.out.println(tags);
+
+                    for(int i = 0; i < tags.size(); i++)
+                        System.out.print(tags.get(i).asText()+ (i < tags.size()-1 ? ", " : "\r\n"));
+
+
+
+                }
+
+            }
+        }
+
+    }
 
 
 }
