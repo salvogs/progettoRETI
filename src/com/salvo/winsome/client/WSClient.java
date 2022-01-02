@@ -21,6 +21,7 @@ import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 
 /**
@@ -41,7 +42,7 @@ public class WSClient {
 
     JsonFactory jfactory;
     JsonParser parser;
-
+    ObjectMapper mapper;
 
     public WSClient(String registryAddr, int registryPort, String serviceName) {
 
@@ -74,7 +75,7 @@ public class WSClient {
             this.jfactory = new JsonFactory();
             this.generator = jfactory.createGenerator(requestStream, JsonEncoding.UTF8);
             this.generator.useDefaultPrettyPrinter();
-
+            this.mapper = new ObjectMapper();
 
 
 
@@ -133,41 +134,44 @@ public class WSClient {
 
             String response = getResponse();
 
-            int resCode = getResponseCode(response);
+            JsonNode res = mapper.readTree(response);
 
-            if (resCode == HttpURLConnection.HTTP_OK) {
+
+
+            int statusCode = getStatusCode(res);
+
+
+            if (statusCode == HttpURLConnection.HTTP_OK) {
+
                 loginUsername = username;
+
+                this.clientCallback = new RMIClient(followers,loginUsername);
+
+                // esporto stub clientCallback per permettere al server di notificare nuovi follow/unfollow
+
+                try {
+                    RMIClientInterface stub = (RMIClientInterface) UnicastRemoteObject.exportObject(clientCallback,0);
+
+                    // mi registro per ricevere notifiche
+
+                    HashMap<String,String[]> ret = remoteServer.registerForCallback(stub); // ritorna eventuali followers
+                    if(ret != null) followers = ret;
+
+
+                } catch (RemoteException e) {
+                    e.printStackTrace();
+                }
+
                 System.out.println("login effettuato con successo");
 
+            }else
+                System.out.println(res.get("message").asText());
 
-            }
-            else if (resCode == HttpURLConnection.HTTP_UNAUTHORIZED)
-                System.err.println("credenziali errate");
-            else if (resCode == HttpURLConnection.HTTP_FORBIDDEN)
-                System.err.println("c'e' un utente gia' collegato, deve essere prima scollegato");
 
         } catch (IOException e) {
-            e.printStackTrace();
+            e.printStackTrace();// todo bad response
         }
 
-
-
-        this.clientCallback = new RMIClient(followers,loginUsername);
-
-        // esporto stub clientCallback per permettere al server di notificare nuovi follow/unfollow
-
-        try {
-            RMIClientInterface stub = (RMIClientInterface) UnicastRemoteObject.exportObject(clientCallback,0);
-
-            // mi registro per ricevere notifiche
-
-            HashMap<String,String[]> ret = remoteServer.registerForCallback(stub); // ritorna eventuali followers
-            if(ret != null) followers = ret;
-
-
-        } catch (RemoteException e) {
-            e.printStackTrace();
-        }
 
     }
 
@@ -191,16 +195,17 @@ public class WSClient {
 
             String response = getResponse();
 
-            int resCode = getResponseCode(response);
+            JsonNode res = mapper.readTree(response);
 
-            if(resCode == HttpURLConnection.HTTP_OK) {
+            int statusCode = getStatusCode(res);
+
+            if(statusCode == HttpURLConnection.HTTP_OK) {
                 loginUsername = null;
                 followers = null;
                 System.out.println("logout effettuato con successo");
-            }else if(resCode == HttpURLConnection.HTTP_UNAUTHORIZED)
-                System.err.println("accesso non eseguito");
-            else if(resCode == HttpURLConnection.HTTP_FORBIDDEN)
-                System.err.println("non e' possibile disconnettere un altro utente");
+            } else
+                System.out.println(res.get("message").asText());
+
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -230,13 +235,14 @@ public class WSClient {
 
             String response = getResponse();
 
-            int resCode = getResponseCode(response);
+            JsonNode res = mapper.readTree(response);
 
-            if(resCode == HttpURLConnection.HTTP_OK) {
+            int statusCode = getStatusCode(res);
 
-                printJsonUserAndTags(response.substring(3).trim());
-            }else if(resCode == HttpURLConnection.HTTP_NOT_FOUND)
-            System.out.println("Non ci sono utenti con tag in comune");
+            if(statusCode == HttpURLConnection.HTTP_OK)
+                printJsonUserAndTags(res.get("users"));
+            else
+                System.out.println(res.get("message").asText());
 
 
 
@@ -282,15 +288,14 @@ public class WSClient {
 
             String response = getResponse();
 
-            int resCode = getResponseCode(response);
+            JsonNode res = mapper.readTree(response);
 
-            if(resCode == HttpURLConnection.HTTP_OK) {
+            int statusCode = getStatusCode(res);
 
-                printJsonUserAndTags(response.substring(3).trim());
-
-            }else if(resCode == HttpURLConnection.HTTP_NOT_FOUND)
-                System.out.println("Non segui ancora nessuno");
-
+            if(statusCode == HttpURLConnection.HTTP_OK)
+                printJsonUserAndTags(res.get("users"));
+            else
+                System.out.println(res.get("message").asText());
 
 
             } catch (IOException e) {
@@ -324,17 +329,14 @@ public class WSClient {
 
             String response = getResponse();
 
-            int resCode = getResponseCode(response);
+            JsonNode res = mapper.readTree(response);
 
-            if(resCode == HttpURLConnection.HTTP_OK) {
+            int statusCode = getStatusCode(res);
+
+            if(statusCode == HttpURLConnection.HTTP_CREATED)
                 System.out.println("Ora segui "+username);
-            }else if(resCode == HttpURLConnection.HTTP_NOT_FOUND)
-                System.err.println("L'utente "+username+" non esiste");
-            else if(resCode == HttpURLConnection.HTTP_UNAUTHORIZED)
-                System.err.println("Accesso non eseguito");
-            else if(resCode == HttpURLConnection.HTTP_CONFLICT)
-                System.err.println("Non puoi seguire te stesso");
-
+            else
+                System.out.println(res.get("message").asText());
 
 
         } catch (IOException e) {
@@ -366,16 +368,16 @@ public class WSClient {
 
             String response = getResponse();
 
-            int resCode = getResponseCode(response);
+            JsonNode res = mapper.readTree(response);
 
-            if(resCode == HttpURLConnection.HTTP_OK) {
-                System.out.println("Hai smesso di seguire "+username);
-            }else if(resCode == HttpURLConnection.HTTP_NOT_FOUND)
-                System.err.println("L'utente "+username+" non esiste");
-            else if(resCode == HttpURLConnection.HTTP_UNAUTHORIZED)
-                System.err.println("Accesso non eseguito");
-            else if(resCode == HttpURLConnection.HTTP_CONFLICT)
-                System.err.println("Non puoi smettere di seguire te stesso");
+            int statusCode = getStatusCode(res);
+
+            if(statusCode == HttpURLConnection.HTTP_OK) {
+                JsonNode m = res.get("message");
+                System.out.println(m != null ? m.asText() : ("Hai smesso di seguire " + username));
+            } else
+                System.out.println(res.get("message").asText());
+
 
 
 
@@ -386,14 +388,357 @@ public class WSClient {
 
     }
 
-    public int viewBlog() {
-        return 0;
+    public void createPost(String title, String content) {
+
+        if(title == null || title == "" || content == null || content == "")
+            throw new IllegalArgumentException();
+
+        if(loginUsername == null){
+            System.err.println("Effettua prima il login");
+            return;
+        }
+
+
+        boolean ret = false;
+        if(title.length() > 20)
+        { System.err.println("Il titolo deve essere lungo al massimo 20 caratteri"); ret = true; }
+
+        if(content.length() > 500)
+        { System.err.println("Il contenuto deve essere lungo al massimo 500 caratteri"); ret = true; }
+
+        if(ret) return;
+
+
+        try {
+
+            generator.writeStartObject();
+            generator.writeStringField("request-type","create-post");
+            generator.writeStringField("username",loginUsername);
+            generator.writeStringField("title",title);
+            generator.writeStringField("content",content);
+            generator.writeEndObject();
+            generator.flush();
+            byte[] request = requestStream.toByteArray();
+            requestStream.reset();
+            System.out.println(requestStream.toString());
+            writeRequest(request,request.length);
+
+            String response = getResponse();
+
+            JsonNode res = mapper.readTree(response);
+
+            int statusCode = getStatusCode(res);
+
+            if(statusCode == HttpURLConnection.HTTP_CREATED) {
+                int idPost = res.get("id-post").asInt();
+                System.out.println("Nuovo post creato (id=" + idPost + ")");
+            }else
+                System.out.println(res.get("message").asText());
+
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+
     }
 
-    public int createPost() {
-        return 0;
+
+    public void deletePost(int idPost) {
+
+        if (loginUsername == null) {
+            System.err.println("Effettua prima il login");
+            return;
+        }
+
+
+        try {
+
+            generator.writeStartObject();
+            generator.writeStringField("request-type", "delete-post");
+            generator.writeStringField("username", loginUsername);
+            generator.writeNumberField("id-post", idPost);
+            generator.writeEndObject();
+            generator.flush();
+            byte[] request = requestStream.toByteArray();
+            requestStream.reset();
+            System.out.println(requestStream.toString());
+            writeRequest(request, request.length);
+
+            String response = getResponse();
+
+            JsonNode res = mapper.readTree(response);
+
+            int statusCode = getStatusCode(res);
+
+            if (statusCode == HttpURLConnection.HTTP_OK) {
+                System.out.println("Nuovo post creato (id=" + idPost + ")");
+            } else if (statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
+                System.err.println("Accesso non eseguito");
+
+
+//            }else if(resCode == HttpURLConnection.HTTP_NOT_FOUND)
+//                System.err.println("L'utente "+username+" non esiste");
+//            else if(resCode == HttpURLConnection.HTTP_CONFLICT)
+//                System.err.println("Non puoi smettere di seguire te stesso");
+
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
     }
 
+    public void showFeed() {
+        if(loginUsername == null){
+            System.err.println("Effettua prima il login");
+            return;
+        }
+
+
+        try {
+
+            generator.writeStartObject();
+            generator.writeStringField("request-type","show-feed");
+            generator.writeStringField("username",loginUsername);
+            generator.writeEndObject();
+
+            generator.flush();
+            byte[] request = requestStream.toByteArray();
+            requestStream.reset();
+            System.out.println(requestStream.toString());
+            writeRequest(request,request.length);
+
+            String response = getResponse();
+
+            JsonNode res = mapper.readTree(response);
+
+            int statusCode = getStatusCode(res);
+
+            if(statusCode == HttpURLConnection.HTTP_OK)
+                printJsonFeed(res.get("feed"));
+            else
+                System.out.println(res.get("message").asText());
+
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+
+    }
+
+    public void blog() {
+        if(loginUsername == null){
+            System.err.println("Effettua prima il login");
+            return;
+        }
+
+        try {
+
+            generator.writeStartObject();
+            generator.writeStringField("request-type","blog");
+            generator.writeStringField("username",loginUsername);
+            generator.writeEndObject();
+
+            generator.flush();
+            byte[] request = requestStream.toByteArray();
+            requestStream.reset();
+            System.out.println(requestStream.toString());
+            writeRequest(request,request.length);
+
+            String response = getResponse();
+
+            JsonNode res = mapper.readTree(response);
+
+            int statusCode = getStatusCode(res);
+
+            if(statusCode == HttpURLConnection.HTTP_OK) {
+                printJsonUserAndTags(res.get("users"));
+                JsonNode tree = mapper.readTree(response.substring(3).trim());
+
+                int idPost = tree.get("id-post").asInt();
+
+                System.out.println("Nuovo post creato (id=" + idPost + ")");
+            }else if(statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
+                System.err.println("Accesso non eseguito");
+
+
+//            }else if(resCode == HttpURLConnection.HTTP_NOT_FOUND)
+//                System.err.println("L'utente "+username+" non esiste");
+//            else if(resCode == HttpURLConnection.HTTP_CONFLICT)
+//                System.err.println("Non puoi smettere di seguire te stesso");
+
+
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    public void rewinPost(int idPost) {
+        if(idPost < 0)
+            throw new IllegalArgumentException();
+
+        if(loginUsername == null){
+            System.err.println("Effettua prima il login");
+            return;
+        }
+
+        try {
+
+            generator.writeStartObject();
+            generator.writeStringField("request-type", "rewin");
+            generator.writeStringField("username",loginUsername);
+            generator.writeNumberField("id-post", idPost);
+            generator.writeEndObject();
+
+            generator.flush();
+            byte[] request = requestStream.toByteArray();
+            requestStream.reset();
+            System.out.println(requestStream.toString());
+            writeRequest(request, request.length);
+
+            String response = getResponse();
+
+            JsonNode res = mapper.readTree(response);
+
+            int statusCode = getStatusCode(res);
+
+            if (statusCode == HttpURLConnection.HTTP_OK) {
+                System.out.println("Rewin del post "+idPost+" effettuato");
+            } else if (statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
+                System.err.println("Accesso non eseguito");
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+
+    }
+
+    public void ratePost(int idPost, String vote) {
+
+        if(idPost < 0 || !vote.equals("+1") && !vote.equals("-1"))
+            throw new IllegalArgumentException();
+
+        if(loginUsername == null){
+            System.err.println("Effettua prima il login");
+            return;
+        }
+
+
+        try {
+
+            generator.writeStartObject();
+            generator.writeStringField("request-type", "rate-post");
+            generator.writeStringField("username",loginUsername);
+            generator.writeNumberField("id-post", idPost);
+            generator.writeNumberField("vote", Integer.parseInt(vote));
+            generator.writeEndObject();
+
+            generator.flush();
+            byte[] request = requestStream.toByteArray();
+            requestStream.reset();
+            System.out.println(requestStream.toString());
+            writeRequest(request, request.length);
+
+            String response = getResponse();
+
+            JsonNode res = mapper.readTree(response);
+
+            int statusCode = getStatusCode(res);
+
+            if (statusCode == HttpURLConnection.HTTP_CREATED)
+                System.out.println("Il post "+idPost+" e' stato votato "+
+                        (vote.equals("+1") ? "positivamente" : "negativamente"));
+            else
+                System.out.println(res.get("message").asText());
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+
+
+    }
+
+    public void addComment(int idPost, String comment) {
+        if(loginUsername == null){
+            System.err.println("Effettua prima il login");
+            return;
+        }
+
+
+        try {
+
+            generator.writeStartObject();
+            generator.writeStringField("request-type", "comment-post");
+            generator.writeStringField("username",loginUsername);
+            generator.writeNumberField("id-post", idPost);
+            generator.writeStringField("comment",comment);
+            generator.writeEndObject();
+
+            generator.flush();
+            byte[] request = requestStream.toByteArray();
+            requestStream.reset();
+            System.out.println(requestStream.toString());
+            writeRequest(request, request.length);
+
+            String response = getResponse();
+
+            JsonNode res = mapper.readTree(response);
+
+            int statusCode = getStatusCode(res);
+
+            if (statusCode == HttpURLConnection.HTTP_CREATED)
+                System.out.println("Commento pubblicato");
+            else
+                System.out.println(res.get("message").asText());
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    public void showPost(int idPost) {
+        if(loginUsername == null){
+            System.err.println("Effettua prima il login");
+            return;
+        }
+
+
+        try {
+
+            generator.writeStartObject();
+            generator.writeStringField("request-type", "show-post");
+            generator.writeStringField("username",loginUsername);
+            generator.writeNumberField("id-post", idPost);
+            generator.writeEndObject();
+
+            generator.flush();
+            byte[] request = requestStream.toByteArray();
+            requestStream.reset();
+            System.out.println(requestStream.toString());
+            writeRequest(request, request.length);
+
+            String response = getResponse();
+
+            JsonNode res = mapper.readTree(response);
+
+            int statusCode = getStatusCode(res);
+
+            if (statusCode == HttpURLConnection.HTTP_OK) {
+                printJsonPost(res);
+            } else if (statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
+                System.err.println("Accesso non eseguito");
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
 
     private void writeRequest(byte[] request, int size) throws IllegalArgumentException, IOException{
@@ -401,7 +746,7 @@ public class WSClient {
         if(request == null || size != request.length)
             throw new IllegalArgumentException();
 
-
+        // todo scrivere tutto insieme
 
         ByteBuffer length = ByteBuffer.allocate(Integer.BYTES);
         length.putInt(size);
@@ -453,24 +798,13 @@ public class WSClient {
     }
 
 
-    private int getResponseCode(String response) throws IOException {
+    private int getStatusCode(JsonNode response) {
 
-        StringTokenizer s = new StringTokenizer(response); // default delimiter
+        JsonNode jn = response.get("status-code");
 
-        try {
-            int resCode = Integer.parseInt(s.nextToken());
-
-            if(resCode == HttpURLConnection.HTTP_BAD_REQUEST) {
-                System.err.println(resCode+": BAD_REQUEST");
-                System.exit(-1);
-            }
+        return jn.asInt();
 
 
-            return resCode;
-
-        } catch (NoSuchElementException e){
-            return -1;
-        }
 
     }
 
@@ -503,43 +837,103 @@ public class WSClient {
 
     }
 
-    private void printJsonUserAndTags(String response) {
+    private void printJsonUserAndTags(JsonNode users) {
+
+        if(!users.isArray()) { System.err.println("bad response"); System.exit(-1); }
+
 
         System.out.println(centerString(20,"Utente")+"|"+centerString(20,"Tag"));
 
         String line = new String(new char[40]).replace('\0', '-');
         System.out.println(line);
 
-        ObjectMapper mapper = new ObjectMapper();
 
-        JsonNode users = null;
-        try {
-            users = mapper.readTree(response);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-//        System.out.println(users);
-
-        if(users.isArray()) {
-            for(JsonNode user : users) {
-                String username = user.get("username").asText();
-                System.out.print(centerString(20,username)+"|  ");
-                JsonNode tags = user.get("tags");
-                if(tags.isArray() && tags.size() != 0 ){
+        for(JsonNode user : users) {
+            String username = user.get("username").asText();
+            System.out.print(centerString(20,username)+"|  ");
+            JsonNode tags = user.get("tags");
+            if(tags.isArray() && tags.size() != 0 ){
 //                    System.out.println(tags);
+                for(int i = 0; i < tags.size(); i++)
+                    System.out.print(tags.get(i).asText()+ (i < tags.size()-1 ? ", " : "\r\n"));
+            }else
+                System.out.println();
 
-                    for(int i = 0; i < tags.size(); i++)
-                        System.out.print(tags.get(i).asText()+ (i < tags.size()-1 ? ", " : "\r\n"));
-
-
-
-                }
-
-            }
         }
 
     }
 
+
+
+    private void printJsonFeed(JsonNode posts) {
+
+        if (!posts.isArray()) {
+            System.err.println("bad response");
+            System.exit(-1);
+        }
+
+
+        System.out.println(centerString(20, "Id") + "|" + centerString(20, "Autore") + "|  Titolo");
+
+        String line = new String(new char[60]).replace('\0', '-');
+        System.out.println(line);
+
+
+        for (JsonNode post : posts) {
+            int idPost = post.get("id-post").asInt();
+            System.out.print(centerString(20, String.valueOf(idPost)) + "|");
+
+            String author = post.get("author").asText();
+            System.out.print(centerString(20, author) + "|");
+
+            String title = post.get("title").asText();
+            System.out.print(centerString(20, "\""+title +"\"")+"\n");
+
+        }
+
+    }
+
+    private void printJsonPost(JsonNode post) {
+
+        if (!post.isObject()) {
+            System.err.println("bad response");
+            System.exit(-1);
+        }
+
+
+
+        String line = new String(new char[40]).replace('\0', '-');
+        System.out.println(line);
+
+
+        String title = post.get("title").asText();
+        String content = post.get("content").asText();
+
+        int upvote = post.get("upvote").asInt();
+        int downvote = post.get("downvote").asInt();
+
+        JsonNode comments = post.get("comments");
+
+        if(!comments.isArray()) {
+            System.err.println("bad response");
+            System.exit(-1);
+        }
+
+
+        System.out.println("Titolo: "+title);
+        System.out.println("Contenuto: "+content);
+        System.out.println("Voti positivi: "+upvote);
+        System.out.println("Voti negativi: "+downvote);
+        System.out.print("Commenti:");
+
+        if(comments.size() == 0)
+            System.out.println(0);
+        else {
+            System.out.println();
+            for (JsonNode c : comments)
+                System.out.println("\t"+c.get("comment-author").asText()+": \""+c.get("comment-content").asText()+"\"");
+        }
+
+    }
 
 }

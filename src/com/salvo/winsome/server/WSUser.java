@@ -30,6 +30,12 @@ public class WSUser {
 
     private HashSet<Integer> blog; //salvo gli id dei post creati dall'utente
 
+//    private HashMap<String,WSUser> follower;
+//    private HashMap<String,WSUser> followed;
+//
+//
+//    private HashMap<Integer,Post> blog;
+
     /**
      * nuovo utente
      * @param username Il nickname
@@ -145,5 +151,9 @@ public class WSUser {
 
     public int getSessionId() {
         return sessionId;
+    }
+
+    public HashSet<Integer> getBlog() {
+        return blog;
     }
 }

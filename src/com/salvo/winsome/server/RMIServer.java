@@ -66,7 +66,7 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
         return 0;
     }
 
-    @Override
+    @Override // todo ritornare al login
     public HashMap<String,String[]> registerForCallback(RMIClientInterface client) throws RemoteException {
 
         String username = client.getUsername();

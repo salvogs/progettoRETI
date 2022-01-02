@@ -1,9 +1,13 @@
 package com.salvo.winsome.client;
 
+import com.sun.deploy.util.StringUtils;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * @author Salvatore Guastella
@@ -63,11 +67,11 @@ public class MainClient {
                 break;
 
             case "blog" :
-                // TODO
+                client.blog();
                 break;
 
             case "show feed" :
-                // TODO
+                client.showFeed();
                 break;
 
             case "wallet" :
@@ -111,56 +115,87 @@ public class MainClient {
                             }
 
                             client.register(username, password, (String[]) tags.toArray(new String[0]));
-                            break;
                         }
+                        break;
 
                         case "login" : {
                             String username = st.nextToken();
                             String password = st.nextToken();
 
                             client.login(username,password);
-                            break;
                         }
-                        case "follow" :
+                        break;
+
+                        case "follow" : {
                             String toFollow = st.nextToken();
                             client.followUser(toFollow);
-                            break;
+                        }
+                        break;
 
-                        case "unfollow" :
+                        case "unfollow" : {
                             String toUnfollow = st.nextToken();
                             client.unfollowUser(toUnfollow);
-                            break;
+                        }
+                        break;
 
-                        case "post" :
-                            // TODO
-                            break;
+                        case "post" : {
+                            st.nextToken("\"");
+                            String title = st.nextToken("\"");
+                            st.nextToken("\"");
+                            String content = st.nextToken("\"");
 
-                        case "show" :
-                            // TODO
-                            break;
+                            client.createPost(title, content);
+                        }
+                        break;
 
-                        case "delete" :
-                            // TODO
-                            break;
+                        case "show" : {
+                            if(st.nextToken().equals("post"))
+                                new NoSuchElementException(); // todo cambiare?
 
-                        case "rewin" :
-                            // TODO
-                            break;
+                            int idPost = Integer.parseInt(st.nextToken());
+                            client.showPost(idPost);
+                        }
+                        break;
 
-                        case "rate" :
-                            // TODO
-                            break;
+                        case "delete" : {
+                            int idPost = Integer.parseInt(st.nextToken());
+                            client.deletePost(idPost);
+                        }
 
-                        case "comment" :
-                            // TODO
-                            break;
+
+                        break;
+
+                        case "rewin" :{
+                            int idPost = Integer.parseInt(st.nextToken());
+                            client.rewinPost(idPost);
+                        }
+
+                        break;
+
+                        case "rate" : {
+                            int idPost = Integer.parseInt(st.nextToken());
+                            String vote = st.nextToken();
+                            client.ratePost(idPost,vote);
+                        }
+                        break;
+
+                        case "comment" : {
+                            int idPost = Integer.parseInt(st.nextToken());
+                            st.nextToken("\"");
+                            String comment = st.nextToken("\"");
+
+                            client.addComment(idPost,comment);
+
+
+                        }
+                        break;
 
 
 
                         default:
-                            throw new NoSuchElementException();
+                            throw new NoSuchElementException(); // todo cambiare?
                     }
-                } catch (NoSuchElementException e){
+                } catch (NoSuchElementException | IllegalArgumentException e){
                     System.err.println("Input non valido, riprova");
                     return;
                 }

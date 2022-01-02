@@ -13,6 +13,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -62,16 +63,15 @@ public class RequestHandler implements Runnable{
 
     public void run() {
         System.out.println(request);
-        int resCode = HttpURLConnection.HTTP_BAD_REQUEST; // codice di risposta di default
+        String response = "{\n  \"status-code\" : 400,\n  \"message\" : \"bad request\"\n}";
         try {
+
 //            JsonToken token = parser.nextToken();
 
 
             JsonNode req = mapper.readTree(request);
 
             JsonNode op = req.get("request-type");
-
-
 
 
             switch (op.asText()) {
@@ -84,19 +84,14 @@ public class RequestHandler implements Runnable{
                         if(password != null){
 
                             SocketChannel clientChannel = (SocketChannel) key.channel();
-                            int ret = server.login(username,password,clientChannel.getRemoteAddress().hashCode());
-                            if(ret == 0)
-                                resCode = HttpURLConnection.HTTP_OK;
-                            else if(ret == -1)
-                                resCode = HttpURLConnection.HTTP_UNAUTHORIZED;
-                            else if(ret == -2)
-                                resCode = HttpURLConnection.HTTP_FORBIDDEN;
+                            response = server.login(username,password,clientChannel.getRemoteAddress().hashCode());
+
                         }
                     }
 
                 }
 
-                    break;
+                break;
 
                 case "logout":{
 
@@ -105,18 +100,13 @@ public class RequestHandler implements Runnable{
 
                         SocketChannel clientChannel = (SocketChannel) key.channel();
 
-                        int ret = server.logout(username,clientChannel.getRemoteAddress().hashCode());
+                        response = server.logout(username,clientChannel.getRemoteAddress().hashCode());
 
-                        if(ret == 0)
-                            resCode = HttpURLConnection.HTTP_OK;
-                        else if(ret == -1)
-                            resCode = HttpURLConnection.HTTP_UNAUTHORIZED;
-                        else if(ret == -2)
-                            resCode = HttpURLConnection.HTTP_FORBIDDEN;
+
 
                     }
                 }
-                    break;
+                break;
 
                 case "follow": {
                     String username = parseNextTextField(req,"username");
@@ -125,21 +115,13 @@ public class RequestHandler implements Runnable{
                         String toFollow = parseNextTextField(req,"to-follow");
                         if (toFollow != null) {
 
-                            int ret = server.followUser(username,toFollow);
+                            response = server.followUser(username,toFollow);
 
-                            if(ret == 0)
-                                resCode = HttpURLConnection.HTTP_OK;
-                            else if(ret == -1)
-                                resCode = HttpURLConnection.HTTP_NOT_FOUND;
-                            else if(ret == -2)
-                                resCode = HttpURLConnection.HTTP_UNAUTHORIZED;
-                            else if(ret == -3)
-                                resCode = HttpURLConnection.HTTP_CONFLICT;
 
                         }
                     }
                 }
-                    break;
+                break;
 
                 case "unfollow": {
                     String username = parseNextTextField(req,"username");
@@ -148,71 +130,149 @@ public class RequestHandler implements Runnable{
                         String toUnfollow = parseNextTextField(req,"to-unfollow");
                         if (toUnfollow != null) {
 
-                            int ret = server.unfollowUser(username,toUnfollow);
+                            response = server.unfollowUser(username,toUnfollow);
 
-                            if(ret == 0)
-                                resCode = HttpURLConnection.HTTP_OK;
-                            else if(ret == -1)
-                                resCode = HttpURLConnection.HTTP_NOT_FOUND;
-                            else if(ret == -2)
-                                resCode = HttpURLConnection.HTTP_UNAUTHORIZED;
-                            else if(ret == -3)
-                                resCode = HttpURLConnection.HTTP_CONFLICT;
+
 
                         }
                     }
                 }
 
-                    break;
+                break;
 
                 case "list-users":{
                     String username = parseNextTextField(req,"username");
                     if(username != null) {
-                        HashMap<String, String[]> selectedUsers = server.listUsers(username);
+                        response = server.listUsers(username);
 
-                        if(selectedUsers == null)
-                            resCode = HttpURLConnection.HTTP_UNAUTHORIZED;
-                        else if(selectedUsers.isEmpty()){
-                            resCode = HttpURLConnection.HTTP_NOT_FOUND;
-                        }else{
-                            resCode = HttpURLConnection.HTTP_OK;
 
-                            usersAndTagsToJson(selectedUsers);
-
-                        }
                     }
                 }
-                    break;
+                break;
 
                 case "list-following":{
                     String username = parseNextTextField(req,"username");
                     if(username != null) {
-                        HashMap<String, String[]> followed = server.listFollowing(username);
-                        if(followed == null)
-                            resCode = HttpURLConnection.HTTP_UNAUTHORIZED;
-                        else if(followed.isEmpty()){
-                            resCode = HttpURLConnection.HTTP_NOT_FOUND;
-                        }else {
-                            resCode = HttpURLConnection.HTTP_OK;
+                        response = server.listFollowing(username);
 
-                            usersAndTagsToJson(followed);
-
-                        }
 
                     }
                 }
-                    break;
+                break;
                 case "create-post":{
                     String username = parseNextTextField(req,"username");
+                    if(username != null) {
+                        String title = parseNextTextField(req,"title");
+                        if(title != null) {
+                            String content = parseNextTextField(req,"content");
+                            if(content != null) {
+                                response = server.createPost(username,title,content);
 
-                    String title = parseNextTextField(req,"title");
+                            }
+                        }
+                    }
 
-                    String content = parseNextTextField(req,"content");
 
 
                 }
 
                 break;
+
+                case "delete-post":{
+                    String username = parseNextTextField(req,"username");
+                    if(username != null) {
+
+                        int idPost = parseNextNumberField(req,"id-post");
+
+                        server.deletePost(username,idPost);
+                    }
+                }
+
+                break;
+
+                case "show-post":{
+                    String username = parseNextTextField(req,"username");
+                    if(username != null) {
+
+                        int idPost = parseNextNumberField(req,"id-post");
+
+                        response = server.showPost(username,idPost);
+                    }
+                }
+
+                break;
+
+                case "show-feed": {
+                    String username = parseNextTextField(req,"username");
+                    if(username != null) {
+                        response = server.showFeed(username);
+                    }
+
+                }
+                break;
+
+                case "blog": {
+                    String username = parseNextTextField(req,"username");
+                    if(username != null) {
+                        ArrayList<Post> feed = server.getBlog(username);
+
+                        generator.writeStartArray();
+
+                        for (Post p : feed) {
+                            generator.writeStartObject();
+                            generator.writeNumberField("id-post",p.getId());
+                            generator.writeStringField("author",p.getAuthor());
+                            generator.writeStringField("title",p.getTitle());
+                            generator.writeEndObject();
+                        }
+
+                        generator.writeEndArray();
+
+                        generator.flush();
+
+                    }
+
+                }
+                break;
+
+                case "rate-post" : {
+                    String username = parseNextTextField(req,"username");
+                    if(username != null) {
+                        int idPost = parseNextNumberField(req,"id-post");
+                        if(idPost != -1) {
+
+                            int vote = parseNextNumberField(req,"vote");
+
+                            if(vote != 0) {
+                                response = server.ratePost(username,idPost,vote);
+
+                            }
+                        }
+
+                    }
+                }
+
+                break;
+
+
+                case "comment-post" : {
+                    String username = parseNextTextField(req,"username");
+                    if(username != null) {
+                        int idPost = parseNextNumberField(req,"id-post");
+                        if(idPost != -1) {
+
+                            String comment = parseNextTextField(req,"comment");
+                            if(comment != null) {
+
+                                response = server.commentPost(username,idPost,comment);
+
+                            }
+                        }
+
+                    }
+                }
+                break;
+
 
                 default: break;
 
@@ -221,17 +281,16 @@ public class RequestHandler implements Runnable{
 
         } catch (IOException e) {
             System.err.println("parsing richiesta fallito");
+            response = "{\n  \"status-code\" : 400,\n  \"message\" : \"bad request\"\n}";
+            e.printStackTrace();
         }
+
 
         try {
 
-            if (responseStream.size() != 0) {
-                sendResponse(resCode + "\r\n" + responseStream.toString());
-                responseStream.reset();
-            } else
-                sendResponse(Integer.toString(resCode)); // potrebbe anche inviare 400 BAD_REQUEST
+            sendResponse(response);  // potrebbe anche inviare 400 BAD_REQUEST
 
-            System.out.println(resCode + "\r\n" + responseStream.toString());
+            System.out.println(response);
 
 
         } catch (IOException e) {
@@ -272,6 +331,12 @@ public class RequestHandler implements Runnable{
         JsonNode field = req.get(fieldName);
 
         return field != null ? field.asText() : null;
+    }
+
+    private int parseNextNumberField(JsonNode req, String fieldName) throws IOException{
+        JsonNode field = req.get(fieldName);
+
+        return field != null ? field.intValue() : 0;
     }
 
 //    private int parseFieldIntValue(String fieldName) {

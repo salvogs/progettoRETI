@@ -1,15 +1,16 @@
 package com.salvo.winsome.server;
 
+import com.fasterxml.jackson.core.JsonEncoding;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.salvo.winsome.RMIServerInterface;
-import javafx.geometry.Pos;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.lang.reflect.Array;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
-import java.nio.charset.StandardCharsets;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
@@ -47,6 +48,11 @@ public class WSServer {
     private int idPostCounter = 0;
 
 
+    JsonFactory jfactory = new JsonFactory();
+    ByteArrayOutputStream responseStream;
+    JsonGenerator generator;
+
+
     public WSServer() {
         this.registeredUser = new HashMap<>();
         this.allTags = new HashMap<>();
@@ -55,6 +61,19 @@ public class WSServer {
 
         this.pool = (ThreadPoolExecutor) Executors.newFixedThreadPool(N_THREAD);
         this.posts = new HashMap<Integer, Post>();
+
+
+
+
+
+        responseStream = new ByteArrayOutputStream();
+        try {
+            this.generator = jfactory.createGenerator(responseStream, JsonEncoding.UTF8);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        this.generator.useDefaultPrettyPrinter();
+
     }
 
     public void start() {
@@ -237,29 +256,34 @@ public class WSServer {
 
 
 
-    public int login(String username, String password, int sessionId) throws IllegalArgumentException {
+    public String login(String username, String password, int sessionId) throws IllegalArgumentException, IOException {
         if(username == null || password == null)
             throw new IllegalArgumentException();
 
         WSUser user = registeredUser.get(username);
 
-        if(user == null || !user.checkPassword(password))
-            return -1;
+        generator.writeStartObject();
 
+        if(user == null || !user.checkPassword(password)) {
+            generator.writeNumberField("status-code",HttpURLConnection.HTTP_UNAUTHORIZED);
+            generator.writeStringField("message","credenziali errate");
+        }else if(user.alreadyLogged()) {
+            generator.writeNumberField("status-code",HttpURLConnection.HTTP_UNAUTHORIZED);
+            generator.writeStringField("message",
+                    "c'e' un utente gia' collegato, deve essere prima scollegato");
+        } else {
+            // todo aggiungere agli utenti loggati per invio ricompense
 
-        if(user.alreadyLogged()) {
-            return -2;
+            user.setLogged(true);
+            user.setSessionId(sessionId);
+
+            hashUser.put(sessionId,username);
+            generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
         }
 
-        // todo aggiungere agli utenti loggati per invio ricompense
 
-        user.setLogged(true);
-        user.setSessionId(sessionId);
-
-        hashUser.put(sessionId,username);
-
-        return 0;
-
+        generator.writeEndObject();
+        return jsonResponseToString();
 
     }
 
@@ -271,192 +295,551 @@ public class WSServer {
      * @return
      * @throws IllegalArgumentException
      */
-    public int logout(String username, int sessionId) throws IllegalArgumentException {
-        if(username == null)
-            throw new IllegalArgumentException();
+    public String logout(String username, int sessionId) throws IllegalArgumentException, IOException {
 
-        WSUser user = registeredUser.get(username);
+        WSUser user = checkUser(username);
 
-        if(user == null || !user.alreadyLogged())
-           return -1;
+        generator.writeStartObject();
 
-        if(user.getSessionId() != sessionId)
-            return -2;
+        if(user != null && checkStatus(user) == 0) {
+            if(user.getSessionId() == sessionId) {
 
-        hashUser.remove(user.getSessionId());
-        user.setLogged(false);
-        user.setSessionId(-1);
+                hashUser.remove(user.getSessionId());
+                user.setLogged(false);
+                user.setSessionId(-1);
 
-        user.setRemoteClient(null);
+                user.setRemoteClient(null);
+                generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
 
-        return 0;
+
+            } else {
+                generator.writeNumberField("status-code", HttpURLConnection.HTTP_FORBIDDEN);
+                generator.writeStringField("message",
+                        "azione non permessa, non e' possibile disconnettere un altro utente");
+            }
+
+        }
+        generator.writeEndObject();
+        return jsonResponseToString();
 
     }
 
 
-    public HashMap<String,String[]> listUsers(String username) throws IllegalArgumentException {
-        if(username == null)
-            throw new IllegalArgumentException();
+    public String listUsers(String username) throws IllegalArgumentException, IOException {
 
-        WSUser user = registeredUser.get(username);
+        WSUser user = checkUser(username);
+        generator.writeStartObject();
+        if(user != null && checkStatus(user) == 0) {
 
-        if(user == null || !user.alreadyLogged())
-            return null;
+            // array degli utenti
+            generator.writeArrayFieldStart("users");
 
-        String[] tags = user.getTags();
+            String[] tags = user.getTags();
+            HashSet<String> written = new HashSet<>();
+            for (String tag : tags) {
+
+                // gli utenti registrati con lo stesso tag
+                ArrayList<WSUser> users = allTags.get(tag);
+                
+                for (WSUser u : users) {
+
+                    if (!u.getUsername().equals(username) && !written.contains(u.getUsername())) {
+                        generator.writeStartObject();
+
+                        generator.writeStringField("username",u.getUsername());
+                        generator.writeArrayFieldStart("tags");
+
+                        for(String t : u.getTags()) {
+                            generator.writeString(t);
+                        }
+
+                        generator.writeEndArray();
+
+                        generator.writeEndObject();
+                        written.add(u.getUsername());
+                    }
+
+                }
+            }
+
+            generator.writeEndArray();
+
+            if(written.isEmpty()) {
+                generator.writeNumberField("status-code", HttpURLConnection.HTTP_NO_CONTENT);
+                generator.writeStringField("message","nessun utente con tag in comune");
+            }else
+                generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
+
+        }
 
 
-        HashMap<String,String[]> selectedUsers = new HashMap<>();
+        generator.writeEndObject();
+        return jsonResponseToString();
 
-        for(String tag : tags) {
+    }
 
-            // gli utenti registrati con lo stesso tag
-            ArrayList<WSUser> users = allTags.get(tag);
+    public String listFollowing(String username) throws IllegalArgumentException, IOException {
 
-            for(WSUser u : users){
-                if(!u.getUsername().equals(username))
-                    selectedUsers.put(u.getUsername(),u.getTags());
+        WSUser user = checkUser(username);
+        generator.writeStartObject();
+        if(user != null && checkStatus(user) == 0) {
+
+
+            HashSet<String> followed = user.getFollowed(); // utenti seguiti
+
+            if(followed.isEmpty()) {
+                generator.writeNumberField("status-code",HttpURLConnection.HTTP_NO_CONTENT);
+                generator.writeStringField("message", "Non segui ancora nessuno");
+            } else {
+
+                generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
+
+                // array degli utenti
+                generator.writeArrayFieldStart("users");
+
+                for(String u : followed) {
+
+                    WSUser f_user = registeredUser.get(u);
+
+                    generator.writeStartObject();
+                    generator.writeStringField("username",f_user.getUsername());
+
+                    generator.writeArrayFieldStart("tags");
+
+                    for(String tag : f_user.getTags()) {
+                        generator.writeString(tag);
+                    }
+
+                    generator.writeEndArray();
+
+                    generator.writeEndObject();
+                }
+
+                generator.writeEndArray();
+            }
+
+
+        }
+
+
+        generator.writeEndObject();
+        return jsonResponseToString();
+
+    }
+
+
+    public String followUser(String username, String toFollow) throws IllegalArgumentException, IOException {
+
+
+        WSUser user = checkUser(username);
+
+        generator.writeStartObject();
+        if(user != null && checkStatus(user) == 0) {
+
+            if(!username.equals(toFollow)) {
+
+                WSUser userToFollow = checkUser(toFollow);
+
+                if(userToFollow != null) {
+                    // se user segue gia' quell'utente non ritorno errori
+                    if(user.getFollowed().contains(toFollow))
+                    {
+                        generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
+                        generator.writeStringField("message", "segui gia' "+toFollow);
+                    } else {
+
+                        user.addFollowed(toFollow);
+                        userToFollow.addFollower(username);
+
+                        try {
+                            if(userToFollow.getSessionId() != -1)
+                                userToFollow.notifyNewFollow(username,user.getTags());
+                        } catch (RemoteException e) {
+                            e.printStackTrace();  // todo client termination
+                        }
+
+                        generator.writeNumberField("status-code",HttpURLConnection.HTTP_CREATED);
+                    }
+
+
+                }
+
+
+            } else {
+                generator.writeNumberField("status-code",HttpURLConnection.HTTP_FORBIDDEN);
+                generator.writeStringField("message", "non puoi seguire te stesso");
             }
 
         }
 
-        return selectedUsers; // empty se non ci sono utenti in comune o l'utente si e' registrato senza tag
+        generator.writeEndObject();
+        return jsonResponseToString();
+
 
 
     }
 
-    public HashMap<String,String[]> listFollowing(String username) throws IllegalArgumentException {
+    public String unfollowUser(String username, String toUnfollow) throws IllegalArgumentException, IOException {
+
+        WSUser user = checkUser(username);
+
+        generator.writeStartObject();
+        if(user != null && checkStatus(user) == 0) {
+
+            if(!username.equals(toUnfollow)) {
+
+                WSUser userToUnfollow = checkUser(toUnfollow);
+
+                if(userToUnfollow != null) {
+                    // se user non segue quell'utente non ritorno errori
+                    if(!user.getFollowed().contains(toUnfollow))
+                    {
+                        generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
+                        generator.writeStringField("message", "non segui "+toUnfollow);
+                    } else {
+
+                        user.removeFollowed(toUnfollow);
+                        userToUnfollow.removeFollower(username);
+
+                        try {
+                            if(userToUnfollow.getSessionId() != -1)
+                                userToUnfollow.notifyNewUnfollow(username);
+                        } catch (RemoteException e) {
+                            e.printStackTrace();  // todo client termination
+                        }
+
+                        generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
+                    }
+
+
+                }
+
+
+            } else {
+                generator.writeNumberField("status-code",HttpURLConnection.HTTP_FORBIDDEN);
+                generator.writeStringField("message", "non puoi smettere di seguire te stesso");
+            }
+
+        }
+
+        generator.writeEndObject();
+
+        return jsonResponseToString();
+
+
+
+
+
+    }
+
+    private String jsonResponseToString() throws IOException {
+
+        generator.flush();
+        String response = responseStream.toString().trim();
+        responseStream.reset();
+        return response;
+    }
+
+    public String createPost(String username, String title, String content) throws IllegalArgumentException, IOException {
+
+        if(title == null || content == null)
+            throw new IllegalArgumentException();
+
+        WSUser user = checkUser(username);
+
+        generator.writeStartObject();
+
+        if(user != null && checkStatus(user) == 0) {
+
+            int id = idPostCounter++;
+
+            Post p = new Post(id,username, title,content);
+
+            user.newPost(p);
+
+            posts.put(id,p);
+
+            generator.writeNumberField("status-code",HttpURLConnection.HTTP_CREATED);
+            generator.writeNumberField("id-post",id);
+
+        }
+
+        generator.writeEndObject();
+
+        return jsonResponseToString();
+
+    }
+
+    public String deletePost(String username, int id) throws IOException {
+
+        if(id < 0)
+            throw new IllegalArgumentException();
+
+        WSUser user = checkUser(username);
+
+        if(user != null && checkStatus(user) == 0) {
+
+            posts.remove(id);
+// todo rewin
+
+
+
+        }
+
+        generator.flush();
+        return responseStream.toString();
+    }
+
+
+    public String showFeed(String username) throws IOException {
+
+        WSUser user = checkUser(username);
+
+        generator.writeStartObject();
+
+        if(user != null && checkStatus(user) == 0) {
+
+            generator.writeArrayFieldStart("feed");
+
+            int written = 0;
+
+            for(String u : user.getFollowed()) {
+
+                HashSet<Integer> blog = registeredUser.get(u).getBlog();
+
+                for(Integer id : blog) {
+
+                    Post p = posts.get(id);
+
+                    generator.writeStartObject();
+                    generator.writeNumberField("id-post",p.getId());
+                    generator.writeStringField("author",p.getAuthor());
+                    generator.writeStringField("title",p.getTitle());
+                    generator.writeEndObject();
+
+                    written++;
+                }
+
+            }
+
+            generator.writeEndArray();
+
+            if(written == 0) {
+                generator.writeNumberField("status-code", HttpURLConnection.HTTP_NO_CONTENT);
+                generator.writeStringField("message","non sono presenti post da visualizzare");
+            }else
+                generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
+
+
+        }
+
+        generator.writeEndObject();
+
+        return jsonResponseToString();
+
+    }
+
+    public ArrayList<Post> getBlog(String username) {
         if(username == null)
             throw new IllegalArgumentException();
 
         WSUser user = registeredUser.get(username);
 
-        if(user == null || !user.alreadyLogged())
-            return null;
-        HashSet<String> followed = user.getFollowed();
+//        if(user == null)
+//            return -1;
+//
+//        if(!user.alreadyLogged())
+//            return -2;
 
+        ArrayList<Post> blog = new ArrayList<>();
 
-        HashMap<String,String[]> toRet = new HashMap<>();
+        for(Integer id : user.getBlog())
+            blog.add(posts.get(id));
 
-        for(String u : followed) {
-            toRet.put(u,registeredUser.get(u).getTags());
-        }
-
-
-        return toRet;
-
+        return blog;
     }
 
-
-    public int followUser(String username, String toFollow) throws IllegalArgumentException{
-        if(username == null || toFollow == null)
+    public int rewinPost(String username, int idPost) {
+        if(username == null)
             throw new IllegalArgumentException();
 
-
         WSUser user = registeredUser.get(username);
-        WSUser userToFollow = registeredUser.get(toFollow);
 
-
-        if(user == null || userToFollow == null)
+        if(user == null)
             return -1;
-
 
         if(!user.alreadyLogged())
             return -2;
 
-            // segue gia' quell'utente
-        if(user.getFollowed().contains(toFollow) || username.equals(toFollow))
-        {
+        Post post = posts.get(idPost);
+
+        if(post == null)
             return -3;
-        }
 
+        user.getBlog().add(idPost);
 
+        post.addRewiner(username);
 
-        user.addFollowed(toFollow);
-        userToFollow.addFollower(username);
-
-        try {
-            if(userToFollow.getSessionId() != -1)
-                userToFollow.notifyNewFollow(username,user.getTags());
-        } catch (RemoteException e) {
-            e.printStackTrace();  // todo client termination
-        }
-
-        return 0;
-
-    }
-
-    public int unfollowUser(String username, String toUnfollow) throws IllegalArgumentException{
-        if(username == null || toUnfollow == null)
-            throw new IllegalArgumentException();
-
-
-        WSUser user = registeredUser.get(username);
-        WSUser userToUnfollow = registeredUser.get(toUnfollow);
-
-        if(user == null || userToUnfollow == null) {
-            return -1;
-        }
-
-        if(!user.alreadyLogged())
-            return -2;
-
-        if(!user.getFollowed().contains(toUnfollow) || username.equals(toUnfollow))
-        {
-            return -2;
-        }
-
-
-
-        user.removeFollowed(toUnfollow);
-        userToUnfollow.removeFollower(username);
-
-        try {
-            if(userToUnfollow.getSessionId() != -1)
-                userToUnfollow.notifyNewUnfollow(username);
-        } catch (RemoteException e) {
-            e.printStackTrace();  // todo client termination
-        }
+        // rewinned
 
         return 0;
     }
 
+    public String ratePost(String username, int idPost, int vote) throws IOException {
 
-    public int createPost(String username, String title, String content) throws IllegalArgumentException{
-        if(username == null || title == null || content == null)
-            throw new IllegalArgumentException();
+        WSUser user = checkUser(username);
 
-        WSUser user = registeredUser.get(username);
+        generator.writeStartObject();
 
-        if(user == null)
-            return -1;
+        if(user != null && checkStatus(user) == 0) {
 
-        int id = idPostCounter++;
+            Post post = checkPost(idPost);
 
-        Post p = new Post(id,title,content);
+            if(post != null) {
 
-        user.newPost(p);
 
-        posts.put(id,p);
+                if(!checkAuthor(username,post) && checkFeed(user,post) && !alreadyVoted(username,post)) {
 
-        return 0;
-    }
 
-    public int deletePost(String username, int id) {
-        if(username == null)
-            throw new IllegalArgumentException();
+                    if (vote == 1)
+                        post.newUpvote(username);
+                    else
+                        post.newDownvote(username);
 
-        WSUser user = registeredUser.get(username);
+                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_CREATED);
 
-        if(user == null)
-            return -1;
+                }
+            }
 
-        if(user.deletePost(id) == false)
-            return -2;
+        }
 
-        return 0;
+        generator.writeEndObject();
+
+        return jsonResponseToString();
+
 
     }
+
+    public String commentPost(String username, int idPost, String comment) throws IOException {
+
+        WSUser user = checkUser(username);
+
+        generator.writeStartObject();
+
+        if(user != null && checkStatus(user) == 0) {
+
+            Post post = checkPost(idPost);
+
+            if(post != null) {
+                if(!checkAuthor(username,post) && checkFeed(user,post)) {
+                    post.newComment(username, comment);
+                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_CREATED);
+                }
+            }
+
+        }
+
+        generator.writeEndObject();
+
+        return jsonResponseToString();
+
+
+    }
+
+
+    public String showPost(String username, int idPost) throws IOException {
+
+        WSUser user = checkUser(username);
+
+        generator.writeStartObject();
+
+        if(user != null && checkStatus(user) == 0) {
+
+            Post post = checkPost(idPost);
+
+            if(post != null) {
+                if(checkFeed(user,post)) {
+                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
+                    generator.writeStringField("title",post.getTitle());
+                    generator.writeStringField("content",post.getContent());
+                    generator.writeNumberField("upvote",post.getUpvote().size());
+                    generator.writeNumberField("downvote",post.getDownvote().size());
+
+                    generator.writeArrayFieldStart("comments");
+                    for(Map.Entry<String,ArrayList<String>> c : post.getComments().entrySet()) {
+                        for(String cont : c.getValue()) {
+                            generator.writeStartObject();
+                            generator.writeStringField("comment-author",c.getKey());
+                            generator.writeStringField("comment-content",cont);
+                            generator.writeEndObject();
+                        }
+                    }
+                    generator.writeEndArray();
+                }
+            }
+        }
+
+        generator.writeEndObject();
+
+        return jsonResponseToString();
+
+    }
+
+
+    /**
+     * controlla se un post appartiene al feed di un utente
+     * @param user
+     * @param post
+     * @return true se il post appartiene al feed dell'utente,
+     *          false altrimenti
+     */
+    private boolean checkFeed(WSUser user, Post post) throws IOException {
+
+        /**
+         * verifico se l'utente segue l'autore del post
+         * oppure se segue almeno uno degli utenti che lo
+         * hanno rewinnato
+         */
+
+        if((user.getFollowed().contains(post.getAuthor()) ||
+        !Collections.disjoint(post.getRewiners(),user.getFollowed())) == false) {
+            generator.writeNumberField("status-code",HttpURLConnection.HTTP_FORBIDDEN);
+            generator.writeStringField("message", "post non presente nel tuo feed");
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     *
+     * @param username
+     * @param post
+     * @return true se il post e' di @username, false altrimenti
+     * @throws IOException
+     */
+    private boolean checkAuthor(String username,Post post) throws IOException {
+        if(post.getAuthor().equals(username)){
+            generator.writeNumberField("status-code",HttpURLConnection.HTTP_FORBIDDEN);
+            generator.writeStringField("message", "non puoi commentare/votare i tuoi post");
+            return true;
+        }
+
+        return false;
+
+    }
+
+    private boolean alreadyVoted(String username, Post post) throws IOException {
+        if(post.voted(username) == true) {
+            generator.writeNumberField("status-code",HttpURLConnection.HTTP_FORBIDDEN);
+            generator.writeStringField("message", "hai gia' votato il post "+post.getId());
+            return true;
+        }
+
+        return false;
+    }
+
+
 
     public void disconnetionHandler(SocketChannel channel) {
         try {
@@ -477,6 +860,7 @@ public class WSServer {
         }
     }
 
+
 //    public int addComment(String username, int id, String comment) {
 //
 //    }
@@ -490,5 +874,79 @@ public class WSServer {
 //        return registeredUser.get(username);
 //
 //    }
+
+
+//    private void usersAndTagsToJson(HashMap<String,String[]> users) throws IOException {
+//
+//        if(users == null)
+//            return;
+//
+//        generator.writeStartArray();
+//
+//        for (Map.Entry<String,String[]> entry : users.entrySet()){
+//            generator.writeStartObject();
+//            generator.writeStringField("username",entry.getKey());
+//
+//            generator.writeArrayFieldStart("tags");
+//
+//            for(String tag : entry.getValue()) {
+//                generator.writeString(tag);
+//            }
+//
+//            generator.writeEndArray();
+//
+//            generator.writeEndObject();
+//        }
+//
+//        generator.writeEndArray();
+//
+//
+//    }
+
+    private WSUser checkUser(String username) throws IOException {
+
+        if(username == null)
+            throw new IllegalArgumentException();
+
+        WSUser user = registeredUser.get(username);
+
+        if(user == null) {
+            generator.writeNumberField("status-code",HttpURLConnection.HTTP_UNAUTHORIZED);
+            generator.writeStringField("message", "nessun utente registrato come "+username);
+            return null;
+        }
+
+        return user;
+
+    }
+
+    private int checkStatus(WSUser user) throws IOException {
+        if(user.alreadyLogged())
+            return 0;
+
+        generator.writeNumberField("status-code",HttpURLConnection.HTTP_UNAUTHORIZED);
+        generator.writeStringField("message", "azione non permessa, login non effettuato");
+        return -1;
+    }
+
+
+    private Post checkPost(int id) throws IOException {
+
+        if(id < 0)
+            throw new IllegalArgumentException();
+
+        Post post = posts.get(id);
+
+        if(post == null) {
+            generator.writeNumberField("status-code",HttpURLConnection.HTTP_NOT_FOUND);
+            generator.writeStringField("message", "post "+id+" non trovato");
+            return null;
+        }
+
+        return post;
+
+    }
+
+
 
 }
