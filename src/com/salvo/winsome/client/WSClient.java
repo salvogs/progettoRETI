@@ -397,7 +397,13 @@ public class WSClient {
 
     public void createPost(String title, String content) {
 
-        if(title == null || title == "" || content == null || content == "")
+        if(title == null || content == null)
+            throw new IllegalArgumentException();
+
+        title = title.trim();
+        content = content.trim();
+
+        if(title.length() == 0 || content.length() == 0)
             throw new IllegalArgumentException();
 
         if(loginUsername == null){
@@ -673,6 +679,15 @@ public class WSClient {
     }
 
     public void addComment(int idPost, String comment) {
+
+        if(idPost < 0 || comment == null)
+            throw new IllegalArgumentException();
+
+        comment = comment.trim();
+
+        if(comment.length() == 0)
+            throw new IllegalArgumentException();
+
         if(loginUsername == null){
             System.err.println("Effettua prima il login");
             return;
@@ -963,5 +978,9 @@ public class WSClient {
             }
         }
     }
+
+
+
+
 
 }

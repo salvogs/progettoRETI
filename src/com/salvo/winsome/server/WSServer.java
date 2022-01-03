@@ -53,6 +53,14 @@ public class WSServer {
     JsonGenerator generator;
 
 
+
+
+    private HashMap<Integer, HashSet<String>> newUpvotes;
+    private HashMap<Integer, HashSet<String>> newDownvotes;
+    private HashMap<Integer, ArrayList<String>> newComments;
+
+
+
     public WSServer() {
         this.registeredUser = new HashMap<>();
         this.allTags = new HashMap<>();
@@ -60,10 +68,7 @@ public class WSServer {
         this.hashUser = new HashMap<>();
 
         this.pool = (ThreadPoolExecutor) Executors.newFixedThreadPool(N_THREAD);
-        this.posts = new HashMap<Integer, Post>();
-
-
-
+        this.posts = new HashMap<>();
 
 
         responseStream = new ByteArrayOutputStream();
@@ -74,6 +79,36 @@ public class WSServer {
         }
         this.generator.useDefaultPrettyPrinter();
 
+
+        this.newUpvotes = new HashMap<>();
+        this.newDownvotes = new HashMap<>();
+        this.newComments = new HashMap<>();
+
+
+    }
+
+
+    public HashMap<Integer, HashSet<String>> getNewUpvotes() {
+        return newUpvotes;
+    }
+
+    public HashMap<Integer, HashSet<String>> getNewDownvotes() {
+        return newDownvotes;
+    }
+
+    public HashMap<Integer, ArrayList<String>> getNewComments() {
+        return newComments;
+    }
+
+    public HashMap<Integer, Post> getPosts() {
+        return posts;
+    }
+
+    public void incrementWallet(String username, double value) {
+        WSUser user = registeredUser.get(username);
+        if(user != null) {
+            user.incrementWallet(value);
+        }
     }
 
     public void start() {
@@ -486,12 +521,12 @@ public class WSServer {
                         user.addFollowed(toFollow);
                         userToFollow.addFollower(username);
 
-                        try {
-                            if(userToFollow.getSessionId() != -1)
-                                userToFollow.notifyNewFollow(username,user.getTags());
-                        } catch (RemoteException e) {
-                            e.printStackTrace();  // todo client termination
-                        }
+//                        try {
+//                            if(userToFollow.getSessionId() != -1)
+////                                userToFollow.notifyNewFollow(username,user.getTags()); // todo togliere commento
+//                        } catch (RemoteException e) {
+//                            e.printStackTrace();  // todo client termination
+//                        }
 
                         generator.writeNumberField("status-code",HttpURLConnection.HTTP_CREATED);
                     }
@@ -772,10 +807,27 @@ public class WSServer {
                 if(!checkAuthor(username,post) && checkFeed(user,post) && !alreadyVoted(username,post)) {
 
 
-                    if (vote == 1)
+                    if (vote == 1) {
                         post.newUpvote(username);
-                    else
+
+                        // memorizzo nuovo voto +
+
+                        if(!newUpvotes.containsKey(idPost))
+                            newUpvotes.put(idPost,new HashSet<>());
+
+                        newUpvotes.get(idPost).add(username); // aggiungo l'username al set dei votanti
+
+                    }
+                    else {
                         post.newDownvote(username);
+
+                        // memorizzo nuovo voto -
+
+                        if(!newDownvotes.containsKey(idPost))
+                            newDownvotes.put(idPost,new HashSet<>());
+
+                        newDownvotes.get(idPost).add(username); // aggiungo l'username al set dei votanti
+                    }
 
                     generator.writeNumberField("status-code", HttpURLConnection.HTTP_CREATED);
 
@@ -804,6 +856,14 @@ public class WSServer {
             if(post != null) {
                 if(!checkAuthor(username,post) && checkFeed(user,post)) {
                     post.newComment(username, comment);
+
+                    // memorizzo nuvo commento
+
+                    if(!newComments.containsKey(idPost))
+                        newComments.put(idPost,new ArrayList<>());
+
+                    newComments.get(idPost).add(username); // a differenza dei voti possono esserci duplicati
+
                     generator.writeNumberField("status-code", HttpURLConnection.HTTP_CREATED);
                 }
             }
@@ -991,6 +1051,61 @@ public class WSServer {
         return response;
     }
 
+
+    public void go() {
+
+        registeredUser.put("u1", new WSUser("u1", "", null));
+        registeredUser.put("u2", new WSUser("u2", "", null));
+        registeredUser.put("u3", new WSUser("u3", "", null));
+        registeredUser.put("u4", new WSUser("u4", "", null));
+        registeredUser.put("u5", new WSUser("u5", "", null));
+        registeredUser.put("u6", new WSUser("u6", "", null));
+
+        // Add some relationships between users
+        try {
+            login("u1", "", 1);
+            login("u2", "", 2);
+            login("u3", "", 3);
+            login("u4", "", 4);
+            login("u5", "", 5);
+            login("u6", "", 6);
+
+
+            followUser("u2", "u1");
+            followUser("u3", "u1");
+            followUser("u4", "u1");
+            followUser("u5", "u1");
+            followUser("u6", "u1");
+
+            createPost("u1", "post bello", "sugoooo");
+
+//            ratePost("u2", 0, 1);
+//            ratePost("u3", 0, -1);
+            ratePost("u4", 0, -1);
+            ratePost("u5", 0, -1);
+//            ratePost("u6", 0, -1);
+
+//            commentPost("u2", 0, "commento1");
+//            commentPost("u3", 0, "commento1");
+            for(int i =0; i < 33; i++)
+                commentPost("u4", 0, "commento1");
+
+//            commentPost("u4", 0, "commento2");
+//            commentPost("u4", 0, "commento3");
+//            commentPost("u5", 0, "commento1");
+//            commentPost("u5", 0, "commento2");
+//            commentPost("u5", 0, "commento3");
+//            commentPost("u5", 0, "commento4");
+//            commentPost("u5", 0, "commento5");
+//            commentPost("u6", 0, "commento1");
+//            commentPost("u6", 0, "commento2");
+
+        } catch (IOException e) {
+            e.printStackTrace();
+
+
+        }
+    }
 
 
 }

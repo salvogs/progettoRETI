@@ -30,11 +30,7 @@ public class WSUser {
 
     private HashSet<Integer> blog; //salvo gli id dei post creati dall'utente
 
-//    private HashMap<String,WSUser> follower;
-//    private HashMap<String,WSUser> followed;
-//
-//
-//    private HashMap<Integer,Post> blog;
+    private double wallet;
 
     /**
      * nuovo utente
@@ -57,7 +53,11 @@ public class WSUser {
         this.followed = new HashSet<>();
 
         this.blog = new HashSet<>();
+        this.wallet = 0;
+    }
 
+    public void incrementWallet(double reward) {
+        wallet += reward;
     }
 
 

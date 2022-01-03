@@ -18,6 +18,8 @@ public class Post {
     private HashSet<String> downvote;
     private HashMap<String, ArrayList<String>> comments;
 
+    private int n_iterations = 0;
+
     /**
      * insieme contenente gli username degli utenti che hanno fatto il rewin del post
      * utile per verificare se un post appartiene al feed di un utente
@@ -90,5 +92,10 @@ public class Post {
 
     public HashSet<String> getRewiners() {
         return rewiners;
+    }
+
+
+    public int incAndGetN_iterations() {
+        return ++n_iterations;
     }
 }

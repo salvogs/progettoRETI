@@ -22,10 +22,6 @@ public class MainClient {
 
         client = new WSClient("localhost",6789,"REGISTRATION-SERVICE");
 
-
-
-
-
         BufferedReader br = new BufferedReader(new InputStreamReader(System.in)); // TODO: cambiare con scanner?
         String input = null;
 
