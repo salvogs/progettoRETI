@@ -10,8 +10,6 @@ import java.util.HashSet;
  */
 public interface RMIClientInterface extends Remote {
 
-    void setFollowers(HashMap<String,String[]> users) throws RemoteException;
-
     void newFollow(String user, String[] tags) throws RemoteException;
 
     void newUnfollow(String user) throws RemoteException;

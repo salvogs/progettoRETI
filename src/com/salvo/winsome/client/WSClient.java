@@ -7,8 +7,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.salvo.winsome.RMIClientInterface;
 import com.salvo.winsome.RMIServerInterface;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -143,6 +145,10 @@ public class WSClient {
 
             if (statusCode == HttpURLConnection.HTTP_OK) {
 
+                // leggo eventuale lista followers
+
+                retriveFollowers(res.get("followers"));
+
                 loginUsername = username;
 
                 this.clientCallback = new RMIClient(followers,loginUsername);
@@ -154,9 +160,10 @@ public class WSClient {
 
                     // mi registro per ricevere notifiche
 
-                    HashMap<String,String[]> ret = remoteServer.registerForCallback(stub); // ritorna eventuali followers
-                    if(ret != null) followers = ret;
-
+                    if(remoteServer.registerForCallback(stub) == -1) {
+                        System.err.println("registerForCallback fallita");
+                        System.exit(-1);
+                    }
 
                 } catch (RemoteException e) {
                     e.printStackTrace();
@@ -201,7 +208,7 @@ public class WSClient {
 
             if(statusCode == HttpURLConnection.HTTP_OK) {
                 loginUsername = null;
-                followers = null;
+                followers.clear();
                 System.out.println("logout effettuato con successo");
             } else
                 System.out.println(res.get("message").asText());
@@ -451,6 +458,7 @@ public class WSClient {
             return;
         }
 
+        if(wantDelete()) return;
 
         try {
 
@@ -471,22 +479,36 @@ public class WSClient {
 
             int statusCode = getStatusCode(res);
 
-            if (statusCode == HttpURLConnection.HTTP_OK) {
-                System.out.println("Nuovo post creato (id=" + idPost + ")");
-            } else if (statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
-                System.err.println("Accesso non eseguito");
-
-
-//            }else if(resCode == HttpURLConnection.HTTP_NOT_FOUND)
-//                System.err.println("L'utente "+username+" non esiste");
-//            else if(resCode == HttpURLConnection.HTTP_CONFLICT)
-//                System.err.println("Non puoi smettere di seguire te stesso");
-
+            if (statusCode == HttpURLConnection.HTTP_OK)
+                System.out.println("Post "+idPost+" cancellato");
+            else
+                System.out.println(res.get("message").asText());
 
         } catch (IOException e) {
             e.printStackTrace();
         }
 
+    }
+
+    private boolean wantDelete() {
+        System.out.println("Sei sicuro di voler cancellare il post? [y/n]");
+
+        String res;
+        BufferedReader input = new BufferedReader(new InputStreamReader(System.in));
+        while(true) {
+            try {
+                res = input.readLine();
+            if ("y".equalsIgnoreCase(res)) {
+                return false;
+            }
+            else if ("n".equalsIgnoreCase(res)) {
+                System.out.println("Operazione cancellata");
+                return true;
+            }
+
+            } catch (IOException e) {}
+                System.out.println("Inserisci \"y\" o \"n\":");
+            }
     }
 
     public void showFeed() {
@@ -516,7 +538,7 @@ public class WSClient {
             int statusCode = getStatusCode(res);
 
             if(statusCode == HttpURLConnection.HTTP_OK)
-                printJsonFeed(res.get("feed"));
+                printJsonPostList(res.get("feed"));
             else
                 System.out.println(res.get("message").asText());
 
@@ -537,7 +559,7 @@ public class WSClient {
         try {
 
             generator.writeStartObject();
-            generator.writeStringField("request-type","blog");
+            generator.writeStringField("request-type","view-blog");
             generator.writeStringField("username",loginUsername);
             generator.writeEndObject();
 
@@ -554,22 +576,9 @@ public class WSClient {
             int statusCode = getStatusCode(res);
 
             if(statusCode == HttpURLConnection.HTTP_OK) {
-                printJsonUserAndTags(res.get("users"));
-                JsonNode tree = mapper.readTree(response.substring(3).trim());
-
-                int idPost = tree.get("id-post").asInt();
-
-                System.out.println("Nuovo post creato (id=" + idPost + ")");
-            }else if(statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
-                System.err.println("Accesso non eseguito");
-
-
-//            }else if(resCode == HttpURLConnection.HTTP_NOT_FOUND)
-//                System.err.println("L'utente "+username+" non esiste");
-//            else if(resCode == HttpURLConnection.HTTP_CONFLICT)
-//                System.err.println("Non puoi smettere di seguire te stesso");
-
-
+                printJsonPostList(res.get("blog"));
+            }else
+                System.out.println(res.get("message").asText());
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -589,7 +598,7 @@ public class WSClient {
         try {
 
             generator.writeStartObject();
-            generator.writeStringField("request-type", "rewin");
+            generator.writeStringField("request-type", "rewin-post");
             generator.writeStringField("username",loginUsername);
             generator.writeNumberField("id-post", idPost);
             generator.writeEndObject();
@@ -606,11 +615,10 @@ public class WSClient {
 
             int statusCode = getStatusCode(res);
 
-            if (statusCode == HttpURLConnection.HTTP_OK) {
+            if (statusCode == HttpURLConnection.HTTP_CREATED)
                 System.out.println("Rewin del post "+idPost+" effettuato");
-            } else if (statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
-                System.err.println("Accesso non eseguito");
-
+            else
+                System.out.println(res.get("message").asText());
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -865,7 +873,7 @@ public class WSClient {
 
 
 
-    private void printJsonFeed(JsonNode posts) {
+    private void printJsonPostList(JsonNode posts) {
 
         if (!posts.isArray()) {
             System.err.println("bad response");
@@ -934,6 +942,26 @@ public class WSClient {
                 System.out.println("\t"+c.get("comment-author").asText()+": \""+c.get("comment-content").asText()+"\"");
         }
 
+    }
+
+    private void retriveFollowers(JsonNode fnode) {
+
+        if(fnode != null && fnode.isArray()) {
+            for (JsonNode follower : fnode) {
+                String username = follower.get("username").asText();
+                JsonNode tnode = follower.get("tags");
+
+                String[] tags = new String[tnode.size()];
+
+                int i = 0;
+                for(JsonNode tag : tnode) {
+                    tags[i] = tag.asText();
+                    i++;
+                }
+
+                followers.put(username,tags);
+            }
+        }
     }
 
 }

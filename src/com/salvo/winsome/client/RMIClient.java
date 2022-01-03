@@ -23,10 +23,7 @@ public class RMIClient extends RemoteServer implements RMIClientInterface {
         this.loginUsername = loginUsername;
     }
 
-    @Override
-    public void setFollowers(HashMap<String,String[]> users) throws RemoteException {
-        followers = users;
-    }
+
     @Override
     public void newFollow(String user,String[] tags) throws RemoteException {
         followers.put(user,tags);

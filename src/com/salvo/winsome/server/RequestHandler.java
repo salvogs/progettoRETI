@@ -184,7 +184,19 @@ public class RequestHandler implements Runnable{
 
                         int idPost = parseNextNumberField(req,"id-post");
 
-                        server.deletePost(username,idPost);
+                        if(idPost != -2)
+                            response = server.deletePost(username,idPost);
+                    }
+                }
+
+                break;
+
+                case "rewin-post":{
+                    String username = parseNextTextField(req,"username");
+                    if(username != null) {
+                        int idPost = parseNextNumberField(req,"id-post");
+                        if(idPost != -2)
+                            response = server.rewinPost(username,idPost);
                     }
                 }
 
@@ -195,8 +207,8 @@ public class RequestHandler implements Runnable{
                     if(username != null) {
 
                         int idPost = parseNextNumberField(req,"id-post");
-
-                        response = server.showPost(username,idPost);
+                        if(idPost != -2)
+                            response = server.showPost(username,idPost);
                     }
                 }
 
@@ -211,27 +223,11 @@ public class RequestHandler implements Runnable{
                 }
                 break;
 
-                case "blog": {
+                case "view-blog": {
                     String username = parseNextTextField(req,"username");
                     if(username != null) {
-                        ArrayList<Post> feed = server.getBlog(username);
-
-                        generator.writeStartArray();
-
-                        for (Post p : feed) {
-                            generator.writeStartObject();
-                            generator.writeNumberField("id-post",p.getId());
-                            generator.writeStringField("author",p.getAuthor());
-                            generator.writeStringField("title",p.getTitle());
-                            generator.writeEndObject();
-                        }
-
-                        generator.writeEndArray();
-
-                        generator.flush();
-
+                        response = server.viewBlog(username);
                     }
-
                 }
                 break;
 
@@ -239,7 +235,7 @@ public class RequestHandler implements Runnable{
                     String username = parseNextTextField(req,"username");
                     if(username != null) {
                         int idPost = parseNextNumberField(req,"id-post");
-                        if(idPost != -1) {
+                        if(idPost != -2) {
 
                             int vote = parseNextNumberField(req,"vote");
 
@@ -259,7 +255,7 @@ public class RequestHandler implements Runnable{
                     String username = parseNextTextField(req,"username");
                     if(username != null) {
                         int idPost = parseNextNumberField(req,"id-post");
-                        if(idPost != -1) {
+                        if(idPost != -2) {
 
                             String comment = parseNextTextField(req,"comment");
                             if(comment != null) {
@@ -336,42 +332,9 @@ public class RequestHandler implements Runnable{
     private int parseNextNumberField(JsonNode req, String fieldName) throws IOException{
         JsonNode field = req.get(fieldName);
 
-        return field != null ? field.intValue() : 0;
+        return field != null ? field.intValue() : -2;
     }
 
-//    private int parseFieldIntValue(String fieldName) {
-//
-//    }
-
-    private void usersAndTagsToJson(HashMap<String,String[]> users) throws IOException {
-
-        if(users == null)
-            return;
-
-        generator.writeStartArray();
-
-        for (Map.Entry<String,String[]> entry : users.entrySet()){
-            generator.writeStartObject();
-            generator.writeStringField("username",entry.getKey());
-
-            generator.writeArrayFieldStart("tags");
-
-            for(String tag : entry.getValue()) {
-                generator.writeString(tag);
-            }
-
-            generator.writeEndArray();
-
-            generator.writeEndObject();
-        }
-
-
-        generator.writeEndArray();
-
-
-        generator.flush();
-
-    }
 
 }
 

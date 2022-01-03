@@ -32,7 +32,7 @@ public class MainClient {
         while (true) {
 
             try {
-                input = br.readLine();
+                input = br.readLine().trim();
             } catch (IOException e) {
                 System.err.println(e.getMessage());
                 System.exit(-1);
@@ -107,7 +107,7 @@ public class MainClient {
                                     break;
                                 }
 
-                                String tag = st.nextToken();
+                                String tag = st.nextToken().toLowerCase();
 
                                 tag_counter += tags.add(tag) ? 1 : 0;
 
@@ -159,6 +159,7 @@ public class MainClient {
 
                         case "delete" : {
                             int idPost = Integer.parseInt(st.nextToken());
+
                             client.deletePost(idPost);
                         }
 

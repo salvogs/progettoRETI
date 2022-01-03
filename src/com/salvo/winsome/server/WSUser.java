@@ -65,10 +65,6 @@ public class WSUser {
         this.remoteClient = remoteClient;
     }
 
-//    // il server invia TUTTI i follower
-//    public void setFollowers(HashSet<String> users) throws RemoteException {
-//        remoteClient.setFollowers(users);
-//    }
 
     // notifica quando l'utente ha un nuovo follower
     public void notifyNewFollow(String user, String[] tags) throws RemoteException {
@@ -130,19 +126,19 @@ public class WSUser {
     }
 
 
-    /**
-     * controlla se il post e' stato creato dall'utente
-     * (quindi se appartiene al suo blog) e lo cancella
-     *
-     * @return true se il post e' stato cancellato con successo, false altrimenti
-     */
-    public boolean deletePost(int id) {
-        if(blog.remove(id) == true)
-            return true;
-
-        return false;
-
-    }
+//    /**
+//     * controlla se il post e' stato creato dall'utente
+//     * (quindi se appartiene al suo blog) e lo cancella
+//     *
+//     * @return true se il post e' stato cancellato con successo, false altrimenti
+//     */
+//    public boolean deletePost(int id) {
+//        if(blog.remove(id) == true)
+//            return true;
+//
+//        return false;
+//
+//    }
 
 
     public void setSessionId(int sessionId) {

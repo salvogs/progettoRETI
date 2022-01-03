@@ -66,48 +66,21 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
         return 0;
     }
 
-    @Override // todo ritornare al login
-    public HashMap<String,String[]> registerForCallback(RMIClientInterface client) throws RemoteException {
+    @Override
+    public int registerForCallback(RMIClientInterface client) throws RemoteException {
 
         String username = client.getUsername();
 
         WSUser user = registeredUser.get(username);
 
         if(user == null)
-            return null;
+            return -1;
 
         user.setRemoteClient(client);
 
         System.out.println("registrato "+client.getUsername());
 
-        return listFollowers(username);
-    }
-
-
-    //    /**
-//     * @return i follower di @username sotto
-//     */
-    private HashMap<String, String[]> listFollowers(String username) throws IllegalArgumentException {
-        if(username == null)
-            throw new IllegalArgumentException();
-
-        WSUser user = registeredUser.get(username);
-
-        if(user == null || !user.alreadyLogged())
-            return null;
-        HashSet<String> followers = user.getFollowers();
-
-        if(followers.isEmpty())
-            return null;
-
-        HashMap<String,String[]> toRet = new HashMap<>();
-
-        for(String u : followers) {
-            toRet.put(u,registeredUser.get(u).getTags());
-        }
-
-
-        return toRet;
+        return 0;
     }
 
 
