@@ -1,0 +1,31 @@
+#
+#Questo è un esempio di file di configurazione.
+#Tutte le righe vuote o che iniziano con '#' verranno ignorate.
+#
+
+#Indirizzo del server
+SERVER=localhost
+
+#Porta TCP del server
+TCPPORT=9000
+
+#Porta UDP del server
+UDPPORT=33333
+
+#Indirizzo di multicast
+MULTICAST=239.255.32.32
+
+#Porta di multicast
+MCASTPORT=44444
+
+#Host su cui si trova il registry
+RMIREGHOST=localhost
+
+#Porta del registry 
+RMIREGPORT=6789
+
+#Nome necessario al lookup dell'oggetto remoto sul registry
+RMISERVICENAME=REG-SERVICE
+
+#Timeout della socket
+TIMEOUT=10000010

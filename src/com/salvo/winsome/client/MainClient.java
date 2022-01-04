@@ -1,5 +1,6 @@
 package com.salvo.winsome.client;
 
+import com.salvo.winsome.Utils;
 import com.sun.deploy.util.StringUtils;
 
 import java.io.BufferedReader;
@@ -18,9 +19,28 @@ public class MainClient {
 
     public static void main(String[] args) {
 
-//        int port = Integer.parseInt(args[0]);
 
-        client = new WSClient("localhost",6789,"REGISTRATION-SERVICE");
+        if(args.length != 1) {
+            System.err.println("usage: java MainClient <config path>");
+            System.exit(-1);
+        }
+
+        HashMap<String,String> result = Utils.parsingConfigFile(args[0]);
+
+        System.out.println(result);
+
+
+        String serverAddress = getStringParameter(result,"server");
+        int tcpPort = getPortParameter(result,"tcpport");
+        int udpPort = getPortParameter(result,"udpport");
+        String multicastAddress = getStringParameter(result,"multicast");
+        int multicastPort = getPortParameter(result,"mcastport");
+        String registryAddr = getStringParameter(result,"rmireghost");
+        int registryPort = getPortParameter(result,"rmiregport");
+        String regServiceName = getStringParameter(result,"rmiservicename");
+
+
+        client = new WSClient(serverAddress,tcpPort,registryAddr,registryPort,regServiceName);
 
         BufferedReader br = new BufferedReader(new InputStreamReader(System.in)); // TODO: cambiare con scanner?
         String input = null;
@@ -41,6 +61,43 @@ public class MainClient {
         }
 
     }
+
+    private static String getStringParameter(HashMap<String,String> result, String name) {
+
+        String parameter = result.get(name);
+
+        if(parameter == null) {
+            System.err.println("parsing \""+name+"\" fallito");
+            System.exit(-1);
+        }
+
+        return parameter;
+    }
+
+    private static int getPortParameter(HashMap<String,String> result, String portName) {
+
+        String port = result.get(portName);
+        int portnum = 0;
+
+        try {
+            if (port != null) {
+
+                portnum = Integer.parseInt(port);
+
+                if (portnum < 1024 || portnum > 65535) {
+                    System.err.println("porta \"" + portName + "\"non valida");
+                    System.exit(-1);
+                }
+            } else throw new NumberFormatException();
+        } catch (NumberFormatException e) {
+            System.err.println("parsing \""+portName+"\" fallito");
+            System.exit(-1);
+        }
+
+        return portnum;
+    }
+
+
 
     private static void decodeAndRunCommand(String input) {
 

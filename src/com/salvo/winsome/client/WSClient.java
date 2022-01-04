@@ -46,31 +46,45 @@ public class WSClient {
     JsonParser parser;
     ObjectMapper mapper;
 
-    public WSClient(String registryAddr, int registryPort, String serviceName) {
+    public WSClient(String serverAddress,int tcpPort, String registryAddr, int registryPort, String serviceName) {
 
         this.loginUsername = null;
         this.followers = new HashMap<>();
 
 
         try {
-            // individuo il registry sulla porta args[0]
-            Registry r = LocateRegistry.getRegistry(registryAddr, registryPort);
+            int attempts = 0;
+            do {
+                try {
+                    // individuo il registry sulla porta args[0]
+                    Registry r = LocateRegistry.getRegistry(registryAddr, registryPort);
 
-            // copia serializzata dello stub esposto dal server remoto
-            Remote remoteObject = r.lookup(serviceName);
+                    // copia serializzata dello stub esposto dal server remoto
+                    Remote remoteObject = r.lookup(serviceName);
 
-            this.remoteServer = (RMIServerInterface) remoteObject;
+                    this.remoteServer = (RMIServerInterface) remoteObject;
 
-            // tcp connection
+                    // tcp connection
 
-            try {
-                this.socket = SocketChannel.open(new InetSocketAddress("localhost", 9000));
-            } catch (IOException e) {
-                System.err.println("ERRORE: Impossibile connettersi con il server");
+
+                    this.socket = SocketChannel.open(new InetSocketAddress(serverAddress, tcpPort));
+
+                    break;
+
+                } catch (IOException e) {
+                    System.err.println("ERRORE: Impossibile connettersi con il server,riprovo tra 1000ms");
+                    attempts++;
+                    Thread.sleep(1000);
+                }
+            }while(attempts < 10);
+
+            if(attempts == 10) {
+                System.out.println("connessione fallita");
                 System.exit(-1);
             }
 
-            System.out.println("Connessione stabilita con il server - localhost:9000");
+
+            System.out.println("Connessione stabilita con "+serverAddress+':'+tcpPort);
 
 
             requestStream = new ByteArrayOutputStream();
@@ -79,17 +93,11 @@ public class WSClient {
             this.generator.useDefaultPrettyPrinter();
             this.mapper = new ObjectMapper();
 
-
-
-        } catch (NotBoundException e) {
-            System.err.println("ERRORE: Nessuna corrispondenza sul registry per "+serviceName);
-            System.exit(-1);
-        } catch (RemoteException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             System.exit(-1);
-        } catch (IOException ex) {
-            ex.printStackTrace();
         }
+
     }
 
     public void register(String username, String password, String[] tags) {

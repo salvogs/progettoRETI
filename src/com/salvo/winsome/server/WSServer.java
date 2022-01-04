@@ -24,6 +24,16 @@ import java.util.concurrent.ThreadPoolExecutor;
  */
 public class WSServer {
 
+
+    private final int tcpPort;
+    private final int udpPort;
+    private final int multicastPort;
+    private final int regPort;
+    private final String regServiceName;
+
+
+
+
     /**
      * hash table degli utenti registrati
      */
@@ -61,7 +71,16 @@ public class WSServer {
 
 
 
-    public WSServer() {
+    public WSServer(int tcpPort, int udpPort, int multicastPort, int regPort, String regServiceName) {
+
+        this.tcpPort = tcpPort;
+        this.udpPort = udpPort;
+        this.multicastPort = multicastPort;
+        this.regPort = regPort;
+        this.regServiceName = regServiceName;
+
+
+
         this.registeredUser = new HashMap<>();
         this.allTags = new HashMap<>();
         this.remoteServer = new RMIServer(registeredUser,allTags);
@@ -86,6 +105,8 @@ public class WSServer {
 
 
     }
+
+
 
 
     public HashMap<Integer, HashSet<String>> getNewUpvotes() {
@@ -115,26 +136,22 @@ public class WSServer {
 
         // esporto oggetto remoteServer
 
-        //        int port = Integer.parseInt(args[0]);
-        int port = 6789;
-        String SERVICE_NAME = "REGISTRATION-SERVICE";
         try {
             RMIServerInterface stub = (RMIServerInterface) UnicastRemoteObject.exportObject(remoteServer, 0);
 
-            // creazione di un registry sulla porta args[0]
+            // creazione di un registry sulla porta parsata dal file di config
 
-            Registry r = LocateRegistry.createRegistry(port);
+            Registry r = LocateRegistry.createRegistry(regPort);
 
             // pubblicazione dello stub sul registry
 
-            r.rebind(SERVICE_NAME, stub);
+            r.rebind(regServiceName, stub);
 
 
         } catch (RemoteException e) {
             e.printStackTrace();
         }
 
-        int socketPort = 9000;
 
         // istanza di un ServerSocketChannel in ascolto di richieste di connessione
 
@@ -142,7 +159,7 @@ public class WSServer {
         Selector selector = null; // per permettere il multiplexing dei canali
         try {
             serverChannel = ServerSocketChannel.open();
-            serverChannel.bind(new InetSocketAddress("localhost", 9000));
+            serverChannel.bind(new InetSocketAddress("localhost", tcpPort));
 
             //imposto il channel come non bloccante
             serverChannel.configureBlocking(false);
@@ -155,7 +172,7 @@ public class WSServer {
             serverChannel.register(selector, SelectionKey.OP_ACCEPT);
 
 
-            System.out.println("In attesa di connessioni sulla porta " + socketPort);
+            System.out.println("In attesa di connessioni sulla porta " + tcpPort);
 
             while (true) {
 
@@ -194,9 +211,6 @@ public class WSServer {
                             } else if (key.isReadable()) {
                                 readMessage(selector, key);
                             }
-//                       } else if (key.isWritable()) {
-//                            sendResponse(selector,key);
-//                        }
 
                         } catch (IOException e) { // terminazione improvvisa del client
                             key.cancel(); // tolgo la chiave dal selector
@@ -270,7 +284,7 @@ public class WSServer {
 
                 bba[1].get(request);
 
-                /* cancello la registrazione del channel, ritorno in modalita' bloccante // todo no
+                /* cancello la registrazione del channel, ritorno in modalita' bloccante
                     e faccio elaborare da un thread del pool la richiesta
                  */
 
@@ -521,12 +535,12 @@ public class WSServer {
                         user.addFollowed(toFollow);
                         userToFollow.addFollower(username);
 
-//                        try {
-//                            if(userToFollow.getSessionId() != -1)
-////                                userToFollow.notifyNewFollow(username,user.getTags()); // todo togliere commento
-//                        } catch (RemoteException e) {
-//                            e.printStackTrace();  // todo client termination
-//                        }
+                        try {
+                            if(userToFollow.getSessionId() != -1)
+                                userToFollow.notifyNewFollow(username,user.getTags()); // todo togliere commento
+                        } catch (RemoteException e) {
+                            e.printStackTrace();  // todo client termination
+                        }
 
                         generator.writeNumberField("status-code",HttpURLConnection.HTTP_CREATED);
                     }
