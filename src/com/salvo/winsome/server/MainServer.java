@@ -3,6 +3,8 @@ package com.salvo.winsome.server;
 
 import com.salvo.winsome.Utils;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.HashMap;
 
 
@@ -29,6 +31,15 @@ public class MainServer {
         int tcpPort = getPortParameter(result,"tcpport");
         int udpPort = getPortParameter(result,"udpport");
         int multicastPort = getPortParameter(result,"mcastport");
+        InetAddress multicastAddress = null;
+        try {
+            multicastAddress = InetAddress.getByName(getStringParameter(result,"multicast"));
+            if(!multicastAddress.isMulticastAddress())
+                throw new UnknownHostException();
+        } catch (UnknownHostException e) {
+            System.out.println ("indirizzo di multicast non valido");
+            System.exit(-1);
+        }
         int regPort = getPortParameter(result,"rmiregport");
         String regServiceName = getStringParameter(result,"rmiservicename");
 
@@ -36,7 +47,8 @@ public class MainServer {
 
 
 
-        WSServer server = new WSServer(tcpPort,udpPort,multicastPort,regPort,regServiceName);
+
+        WSServer server = new WSServer(tcpPort,udpPort,multicastPort,multicastAddress,regPort,regServiceName);
 
         Thread rewardsThread = new Thread(new RewardsHandler(server));
 
@@ -44,6 +56,7 @@ public class MainServer {
 
 //        rewardsThread.start();
         server.start();
+
 
 
 

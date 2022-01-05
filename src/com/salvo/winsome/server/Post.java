@@ -1,6 +1,9 @@
 package com.salvo.winsome.server;
 
 import javafx.geometry.Pos;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -9,16 +12,17 @@ import java.util.HashSet;
 /**
  * @author Salvatore Guastella
  */
+@NoArgsConstructor
 public class Post {
-    private int id;
-    private String author;
-    private String title;
-    private String content;
-    private HashSet<String> upvote;
-    private HashSet<String> downvote;
-    private HashMap<String, ArrayList<String>> comments;
+    @Getter @Setter private int id;
+    @Getter @Setter private String author;
+    @Getter @Setter private String title;
+    @Getter @Setter private String content;
+    @Getter @Setter private HashSet<String> upvote;
+    @Getter @Setter private HashSet<String> downvote;
+    @Getter @Setter private HashMap<String, ArrayList<String>> comments;
 
-    private int n_iterations = 0;
+    @Getter @Setter private int n_iterations = 0;
 
     /**
      * insieme contenente gli username degli utenti che hanno fatto il rewin del post

@@ -3,12 +3,12 @@ package com.salvo.winsome.server;
 import com.fasterxml.jackson.core.JsonEncoding;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.salvo.winsome.RMIServerInterface;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.net.HttpURLConnection;
-import java.net.InetSocketAddress;
+import java.io.*;
+import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.rmi.RemoteException;
@@ -27,6 +27,7 @@ public class WSServer {
 
     private final int tcpPort;
     private final int udpPort;
+    private final InetAddress multicastAddress;
     private final int multicastPort;
     private final int regPort;
     private final String regServiceName;
@@ -58,6 +59,7 @@ public class WSServer {
     private int idPostCounter = 0;
 
 
+    ObjectMapper mapper = new ObjectMapper();
     JsonFactory jfactory = new JsonFactory();
     ByteArrayOutputStream responseStream;
     JsonGenerator generator;
@@ -70,26 +72,39 @@ public class WSServer {
     private HashMap<Integer, ArrayList<String>> newComments;
 
 
+    private File backupDir;
+    private File usersBackup;
+    private File postsBackup;
 
-    public WSServer(int tcpPort, int udpPort, int multicastPort, int regPort, String regServiceName) {
+
+
+    public WSServer(int tcpPort, int udpPort, int multicastPort, InetAddress multicastAddress, int regPort, String regServiceName) {
 
         this.tcpPort = tcpPort;
         this.udpPort = udpPort;
+
+
+        this.multicastAddress = multicastAddress;
         this.multicastPort = multicastPort;
         this.regPort = regPort;
         this.regServiceName = regServiceName;
 
-
-
         this.registeredUser = new HashMap<>();
+        this.posts = new HashMap<>();
+
+        this.backupDir = new File("./backup"); // todo parse
+        this.usersBackup = new File(backupDir + "/users.json");
+        this.postsBackup = new File(backupDir + "/posts.json");
+
+        restoreBackup(usersBackup,postsBackup);
+
         this.allTags = new HashMap<>();
         this.remoteServer = new RMIServer(registeredUser,allTags);
         this.hashUser = new HashMap<>();
 
         this.pool = (ThreadPoolExecutor) Executors.newFixedThreadPool(N_THREAD);
-        this.posts = new HashMap<>();
 
-
+        mapper = new ObjectMapper();
         responseStream = new ByteArrayOutputStream();
         try {
             this.generator = jfactory.createGenerator(responseStream, JsonEncoding.UTF8);
@@ -105,6 +120,47 @@ public class WSServer {
 
 
     }
+
+
+    private void restoreBackup(File usersBackup,File postsBackup) {
+
+        if(!backupDir.exists()) // se la directory non esiste la creo
+            backupDir.mkdir();
+
+
+
+        try {
+
+            if(!usersBackup.exists()) {
+                usersBackup.createNewFile();
+
+            } else if(usersBackup.length() > 0){
+
+                BufferedReader usersReader = new BufferedReader(new FileReader(usersBackup));
+
+                registeredUser = mapper.readValue(usersReader,new TypeReference<HashMap<String,WSUser>>() {});
+
+                }
+
+
+
+
+            if(!postsBackup.exists()) {
+                postsBackup.createNewFile();
+
+            } else if(postsBackup.length() > 0){
+                BufferedReader postsReader = new BufferedReader(new FileReader(postsBackup));
+                posts = mapper.readValue(postsReader,new TypeReference<HashMap<Integer,Post>>() {});
+//                postsReader.close();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.exit(-1);
+        }
+
+    }
+
+
 
 
 
@@ -132,11 +188,19 @@ public class WSServer {
         }
     }
 
+
     public void start() {
 
-        // esporto oggetto remoteServer
+
+        // creo e avvio thread per la gestione del backup
+
+
+        Thread backupThread = new Thread(new BackupHandler(registeredUser,usersBackup,posts,postsBackup));
+        backupThread.start();
+
 
         try {
+            // esporto oggetto remoteServer
             RMIServerInterface stub = (RMIServerInterface) UnicastRemoteObject.exportObject(remoteServer, 0);
 
             // creazione di un registry sulla porta parsata dal file di config
@@ -307,7 +371,7 @@ public class WSServer {
 
     public String login(String username, String password, int sessionId) throws IllegalArgumentException, IOException {
 
-        if(password == null || sessionId < 0)
+        if (password == null || sessionId < 0)
             throw new IllegalArgumentException();
 
         generator.writeStartObject();
@@ -315,53 +379,55 @@ public class WSServer {
         WSUser user = checkUser(username);
 
 
-        if(user != null && !user.alreadyLogged()) {
+        if (user != null) {
+            if (!user.alreadyLogged()) {
 
-            if(user.checkPassword(password)) { // ok
+                if (user.checkPassword(password)) { // ok
 
-                user.setLogged(true);
-                user.setSessionId(sessionId);
+                    user.setLogged(true);
+                    user.setSessionId(sessionId);
 
-                hashUser.put(sessionId,username);
-                generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
+                    hashUser.put(sessionId, username);
+                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
 
-                // invio la lista dei follower
+                    // invio la lista dei follower
 
-                if(!user.getFollowers().isEmpty()) {
+                    if (!user.getFollowers().isEmpty()) {
 
-                    Iterator it = user.getFollowers().iterator();
-                    generator.writeArrayFieldStart("followers");
+                        Iterator it = user.getFollowers().iterator();
+                        generator.writeArrayFieldStart("followers");
 
-                    while(it.hasNext()) {
-                        generator.writeStartObject();
+                        while (it.hasNext()) {
+                            generator.writeStartObject();
 
-                        WSUser follower = registeredUser.get(it.next());
+                            WSUser follower = registeredUser.get(it.next());
 
-                        generator.writeStringField("username",follower.getUsername());
-                        generator.writeArrayFieldStart("tags");
+                            generator.writeStringField("username", follower.getUsername());
+                            generator.writeArrayFieldStart("tags");
 
-                        for(String t : follower.getTags()) {
-                            generator.writeString(t);
+                            for (String t : follower.getTags()) {
+                                generator.writeString(t);
+                            }
+
+                            generator.writeEndArray();
+
+                            generator.writeEndObject();
                         }
 
                         generator.writeEndArray();
 
-                        generator.writeEndObject();
                     }
 
-                    generator.writeEndArray();
-
+                } else {
+                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_UNAUTHORIZED);
+                    generator.writeStringField("message", "credenziali errate");
                 }
-
             } else {
-                generator.writeNumberField("status-code",HttpURLConnection.HTTP_UNAUTHORIZED);
-                generator.writeStringField("message","credenziali errate");
+                generator.writeNumberField("status-code", HttpURLConnection.HTTP_UNAUTHORIZED);
+                generator.writeStringField("message",
+                        "c'e' un utente gia' collegato, deve essere prima scollegato");
             }
-        } else {
-            generator.writeNumberField("status-code",HttpURLConnection.HTTP_UNAUTHORIZED);
-            generator.writeStringField("message",
-                    "c'e' un utente gia' collegato, deve essere prima scollegato");
-        }
+    }
 
 
 

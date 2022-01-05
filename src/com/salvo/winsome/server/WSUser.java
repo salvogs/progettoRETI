@@ -1,36 +1,46 @@
 package com.salvo.winsome.server;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.salvo.winsome.RMIClientInterface;
 
+import java.io.Serializable;
 import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 
+import lombok.*;
+
 /**
  * @author Salvatore Guastella
  */
+//@NoArgsConstructor
+public class WSUser implements Serializable {
 
-public class WSUser {
+    @Getter @Setter private String username;
+    @Getter @Setter private String password;
+    @Getter @Setter private String[] tags;
+    @JsonIgnore private boolean logged;
+    @JsonIgnore private RMIClientInterface remoteClient;
 
-    private String username;
-    private String password;
-    private String[] tags;
-
-    private boolean logged;
-    private RMIClientInterface remoteClient;
-
-    private int sessionId;
-
-
-    private HashSet<String> follower;
-    private HashSet<String> followed;
+    @JsonIgnore private int sessionId;
 
 
-    private HashSet<Integer> blog; //salvo gli id dei post creati dall'utente
+    @Getter @Setter private HashSet<String> follower;
+    @Getter @Setter private HashSet<String> followed;
 
-    private double wallet;
+
+    @Getter @Setter private HashSet<Integer> blog; //salvo gli id dei post creati dall'utente
+
+    @Getter @Setter private double wallet;
+
+
+
+    public WSUser(){
+        logged = false;
+        remoteClient = null;
+        sessionId = -1;
+    }
 
     /**
      * nuovo utente
@@ -38,7 +48,6 @@ public class WSUser {
      * @param password La password
      * @param tags lista dei tag
      */
-
     public WSUser(String username, String password, String[] tags){
         this.username = username;
         this.password = password;
@@ -55,6 +64,9 @@ public class WSUser {
         this.blog = new HashSet<>();
         this.wallet = 0;
     }
+
+
+
 
     public void incrementWallet(double reward) {
         wallet += reward;
@@ -152,4 +164,6 @@ public class WSUser {
     public HashSet<Integer> getBlog() {
         return blog;
     }
+
+
 }
