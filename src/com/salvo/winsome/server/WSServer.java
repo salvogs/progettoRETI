@@ -9,6 +9,7 @@ import com.salvo.winsome.RMIServerInterface;
 
 import java.io.*;
 import java.net.*;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.rmi.RemoteException;
@@ -71,6 +72,9 @@ public class WSServer {
     private HashMap<Integer, HashSet<String>> newDownvotes;
     private HashMap<Integer, ArrayList<String>> newComments;
 
+    private int rewardsIteration;
+    private int idTransactionsCounter;
+    private double lastExchangeRate;
 
     private File backupDir;
     private File usersBackup;
@@ -119,6 +123,10 @@ public class WSServer {
         this.newComments = new HashMap<>();
 
 
+        this.rewardsIteration = 0;
+        this.idTransactionsCounter = 0;
+
+        this.lastExchangeRate = 0;
     }
 
 
@@ -181,11 +189,16 @@ public class WSServer {
         return posts;
     }
 
-    public void incrementWallet(String username, double value) {
+    public void incrementWallet(String username, String timestamp, double value) {
         WSUser user = registeredUser.get(username);
         if(user != null) {
             user.incrementWallet(value);
+            user.addTranstaction(new Transaction(idTransactionsCounter++,timestamp,value));
         }
+    }
+
+    public void setRewardsIteration(int iteration) {
+        rewardsIteration = iteration;
     }
 
 
@@ -601,12 +614,12 @@ public class WSServer {
                         user.addFollowed(toFollow);
                         userToFollow.addFollower(username);
 
-                        try {
-                            if(userToFollow.getSessionId() != -1)
-                                userToFollow.notifyNewFollow(username,user.getTags()); // todo togliere commento
-                        } catch (RemoteException e) {
-                            e.printStackTrace();  // todo client termination
-                        }
+//                        try {
+//                            if(userToFollow.getSessionId() != -1)
+//                                userToFollow.notifyNewFollow(username,user.getTags()); // todo togliere commento
+//                        } catch (RemoteException e) {
+//                            e.printStackTrace();  // todo client termination
+//                        }
 
                         generator.writeNumberField("status-code",HttpURLConnection.HTTP_CREATED);
                     }
@@ -691,7 +704,7 @@ public class WSServer {
 
             int id = idPostCounter++;
 
-            Post p = new Post(id,username, title,content);
+            Post p = new Post(id,username,title,content,rewardsIteration);
 
             user.newPost(p);
 
@@ -1003,6 +1016,95 @@ public class WSServer {
     }
 
 
+    public String getWallet(String username) throws IOException {
+        WSUser user = checkUser(username);
+
+        generator.writeStartObject();
+
+        if(user != null && checkStatus(user) == 0) {
+
+            generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
+
+            generator.writeNumberField("wallet",user.getWallet());
+
+            ArrayList<Transaction> transactions = user.getTransactions();
+
+            if(!transactions.isEmpty()) {
+                generator.writeArrayFieldStart("transactions");
+
+                for (Transaction t : transactions) {
+                    generator.writeStartObject();
+                    generator.writeNumberField("id", t.getId());
+                    generator.writeStringField("timestamp", t.getTimestamp());
+                    generator.writeNumberField("value", t.getValue());
+                    generator.writeEndObject();
+                }
+
+                generator.writeEndArray();
+            }
+
+
+        }
+
+        generator.writeEndObject();
+
+        return jsonResponseToString();
+    }
+
+    public String getWalletInBitcoin(String username) throws IOException {
+        WSUser user = checkUser(username);
+
+//        user.getWallet()
+
+        generator.writeStartObject();
+
+        if(user != null && checkStatus(user) == 0) {
+            double walletBtc =  1.638344810037658 * getExchangeRate();
+
+            generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
+
+            generator.writeNumberField("wallet-btc",walletBtc);
+
+
+
+        }
+
+        generator.writeEndObject();
+
+        return jsonResponseToString();
+    }
+
+
+    private double getExchangeRate() {
+
+        double rate;
+
+        try {
+            URL url = new URL("https://www.random.org/decimal-fractions/?num=1&dec=6&col=1&format=plain&rnd=new");
+            HttpURLConnection urlCon = (HttpURLConnection) url.openConnection();
+            urlCon.setRequestMethod("GET");
+
+            if(urlCon.getResponseCode() == HttpURLConnection.HTTP_OK) {
+                BufferedReader in = new BufferedReader(new InputStreamReader(urlCon.getInputStream()));
+
+                StringBuilder s = new StringBuilder();
+
+                rate = Double.parseDouble(in.readLine());
+                in.close();
+
+                lastExchangeRate = rate;
+                return rate;
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        System.err.println("errore richiesta http a RANDOM.ORG");
+        System.out.println("exchange rate = "+lastExchangeRate);
+        return lastExchangeRate;
+    }
+
     /**
      * controlla se un post appartiene al feed di un utente
      * @param user
@@ -1134,7 +1236,7 @@ public class WSServer {
 
     public void go() {
 
-        registeredUser.put("u1", new WSUser("u1", "", null));
+        registeredUser.put("u1", new WSUser("u1", "a", null));
         registeredUser.put("u2", new WSUser("u2", "", null));
         registeredUser.put("u3", new WSUser("u3", "", null));
         registeredUser.put("u4", new WSUser("u4", "", null));
@@ -1159,15 +1261,17 @@ public class WSServer {
 
             createPost("u1", "post bello", "sugoooo");
 
-//            ratePost("u2", 0, 1);
-//            ratePost("u3", 0, -1);
-            ratePost("u4", 0, -1);
+
+
+            ratePost("u2", 0, 1);
+            ratePost("u3", 0, 1);
+            ratePost("u4", 0, 1);
             ratePost("u5", 0, -1);
 //            ratePost("u6", 0, -1);
 
-//            commentPost("u2", 0, "commento1");
-//            commentPost("u3", 0, "commento1");
-            for(int i =0; i < 33; i++)
+            commentPost("u2", 0, "commento1");
+            commentPost("u3", 0, "commento1");
+            for(int i =0; i < 3; i++)
                 commentPost("u4", 0, "commento1");
 
 //            commentPost("u4", 0, "commento2");

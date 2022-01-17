@@ -21,6 +21,9 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
+import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
@@ -771,6 +774,77 @@ public class WSClient {
         }
     }
 
+    public void getWallet() {
+        if(loginUsername == null){
+            System.err.println("Effettua prima il login");
+            return;
+        }
+
+        try {
+
+            generator.writeStartObject();
+            generator.writeStringField("request-type", "wallet");
+            generator.writeStringField("username",loginUsername);
+            generator.writeEndObject();
+            generator.flush();
+
+            byte[] request = requestStream.toByteArray();
+            requestStream.reset();
+            System.out.println(requestStream.toString());
+            writeRequest(request, request.length);
+
+            String response = getResponse();
+
+            JsonNode res = mapper.readTree(response);
+
+            int statusCode = getStatusCode(res);
+
+            if (statusCode == HttpURLConnection.HTTP_OK) {
+                printJsonWallet(res);
+            } else if (statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
+                System.err.println("Accesso non eseguito");
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void getWalletInBitcoin() {
+        if(loginUsername == null){
+            System.err.println("Effettua prima il login");
+            return;
+        }
+
+        try {
+
+            generator.writeStartObject();
+            generator.writeStringField("request-type", "wallet-btc");
+            generator.writeStringField("username",loginUsername);
+            generator.writeEndObject();
+            generator.flush();
+
+            byte[] request = requestStream.toByteArray();
+            requestStream.reset();
+            System.out.println(requestStream.toString());
+            writeRequest(request, request.length);
+
+            String response = getResponse();
+
+            JsonNode res = mapper.readTree(response);
+
+            int statusCode = getStatusCode(res);
+
+            if (statusCode == HttpURLConnection.HTTP_OK) {
+                System.out.println("Wallet BTC: "+res.get("wallet-btc").asText());
+            } else if (statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
+                System.err.println("Accesso non eseguito");
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+
 
     private void writeRequest(byte[] request, int size) throws IllegalArgumentException, IOException{
 
@@ -966,6 +1040,30 @@ public class WSClient {
         }
 
     }
+
+    private void printJsonWallet(JsonNode wallet) {
+        System.out.println("Wallet->>> "+wallet.get("wallet").asText() + " wincoins");
+
+        JsonNode transactions = wallet.get("transactions");
+
+        if(transactions != null && transactions.size() > 0 && transactions.isArray()) {
+
+            System.out.println(centerString(10, "Id") + "|" + centerString(22, "Data") + "|  Valore");
+
+            System.out.println(new String(new char[55]).replace('\0', '-'));
+            for(JsonNode t : transactions){
+
+                System.out.print(centerString(10, t.get("id").asText()) + "|");
+
+
+                System.out.print(centerString(22,t.get("timestamp").asText())+ "|");
+
+                System.out.println(centerString(22, t.get("value").asText()));
+
+            }
+        }
+    }
+
 
     private void retriveFollowers(JsonNode fnode) {
 

@@ -35,6 +35,8 @@ public class WSUser implements Serializable {
     @Getter @Setter private double wallet;
 
 
+    @JsonIgnore @Getter private ArrayList<Transaction> transactions;
+
 
     public WSUser(){
         logged = false;
@@ -63,6 +65,8 @@ public class WSUser implements Serializable {
 
         this.blog = new HashSet<>();
         this.wallet = 0;
+
+        this.transactions = new ArrayList<>();
     }
 
 
@@ -163,6 +167,10 @@ public class WSUser implements Serializable {
 
     public HashSet<Integer> getBlog() {
         return blog;
+    }
+
+    public void addTranstaction(Transaction t) {
+        transactions.add(t);
     }
 
 

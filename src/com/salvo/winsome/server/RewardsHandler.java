@@ -1,5 +1,8 @@
 package com.salvo.winsome.server;
 
+import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
 import java.util.*;
 
 /**
@@ -14,6 +17,8 @@ public class RewardsHandler implements Runnable{
     private double authorPercentage = 0.7; // todo config
 
 
+    private int globalIterations = 0;
+
     public RewardsHandler(WSServer server) {
         this.server = server;
         this.posts= server.getPosts();
@@ -23,13 +28,16 @@ public class RewardsHandler implements Runnable{
     public void run() {
 
         while (true) {
+
+            server.setRewardsIteration(globalIterations);
 //            try {
 //                Thread.sleep(TIMEOUT*1000);
             Scanner s = new Scanner(System.in);
 
             System.out.println(s.nextLine());
                 System.out.println("SCATTATO TIMERRRRR");
-                server.go();
+                globalIterations++;
+//                server.go();
 //            } catch (InterruptedException e) {
 //                e.printStackTrace();
 //            }
@@ -70,12 +78,10 @@ public class RewardsHandler implements Runnable{
             int n_comments = comments.containsKey(idPost) ? comments.get(idPost).size() : 0;
 
             Post p = posts.get(idPost);
-            int n_iterations = p.incAndGetN_iterations();
+            int n_iterations = p.getN_iterations();
 
-            int newUpvotes = n_upvote == 0 ? 0 : upvotes.get(idPost).size();
-            int newDownvotes = n_downvote == 0 ? 0 : downvotes.get(idPost).size();
 
-            int newPeopleLikesSum = newUpvotes - newDownvotes;
+            int newPeopleLikesSum = n_upvote - n_downvote;
 
             double reward = Math.log(Math.max(newPeopleLikesSum,0) + 1); // prima parte numeratore
 
@@ -111,12 +117,15 @@ public class RewardsHandler implements Runnable{
 
 
             reward += Math.log(newPeopleCommentingSum+1); // seconda parte numeratore
-            reward = reward / n_iterations;
+            reward = reward / (globalIterations - n_iterations);
 
 
             System.out.println("rewarddd: "+reward);
 
+            SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
+
             double authorReward = reward * authorPercentage;
+            server.incrementWallet(p.getAuthor(),sdf.format(new Date()),authorReward);
 
 
 
@@ -129,7 +138,7 @@ public class RewardsHandler implements Runnable{
             double curatorReward = (reward - authorReward) / curators.size();
 
             for(String curator : curators)
-                server.incrementWallet(curator,curatorReward);
+                server.incrementWallet(curator,sdf.format(new Date()),curatorReward);
 
 
             postsToCompute.remove(idPost);

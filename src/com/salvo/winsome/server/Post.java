@@ -1,6 +1,5 @@
 package com.salvo.winsome.server;
 
-import javafx.geometry.Pos;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -24,6 +23,9 @@ public class Post {
 
     @Getter @Setter private int n_iterations = 0;
 
+
+
+
     /**
      * insieme contenente gli username degli utenti che hanno fatto il rewin del post
      * utile per verificare se un post appartiene al feed di un utente
@@ -31,7 +33,7 @@ public class Post {
     private HashSet<String> rewiners;
 
 
-    public Post(int id, String author, String title, String content) {
+    public Post(int id, String author, String title, String content,int n_iterations) {
         this.id = id;
         this.author = author;
         this.title = title;
@@ -40,6 +42,7 @@ public class Post {
         this.downvote = new HashSet<>();
         this.comments = new HashMap<>();
         this.rewiners = new HashSet<>();
+        this.n_iterations = n_iterations;
     }
 
     public boolean voted(String username) {
@@ -99,7 +102,11 @@ public class Post {
     }
 
 
-    public int incAndGetN_iterations() {
-        return ++n_iterations;
-    }
+
+
+
+
+//    public int incAndGetN_iterations() {
+//        return ++n_iterations;
+//    }
 }

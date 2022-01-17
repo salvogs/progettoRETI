@@ -269,6 +269,22 @@ public class RequestHandler implements Runnable{
                 }
                 break;
 
+                case "wallet" : {
+                    String username = parseNextTextField(req,"username");
+                    if(username != null) {
+                        response = server.getWallet(username);
+                    }
+                }
+                break;
+
+                case "wallet-btc" : {
+                    String username = parseNextTextField(req,"username");
+                    if(username != null) {
+                        response = server.getWalletInBitcoin(username);
+                    }
+                }
+
+                break;
 
                 default: break;
 

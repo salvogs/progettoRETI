@@ -54,9 +54,8 @@ public class MainServer {
 
 
 
-//        rewardsThread.start();
+        rewardsThread.start();
         server.start();
-
 
 
 

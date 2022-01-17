@@ -1,14 +1,13 @@
 package com.salvo.winsome.client;
 
 import com.salvo.winsome.Utils;
-import com.sun.deploy.util.StringUtils;
+
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+
 
 /**
  * @author Salvatore Guastella
@@ -128,11 +127,11 @@ public class MainClient {
                 break;
 
             case "wallet" :
-                // TODO
+                client.getWallet();
                 break;
 
             case "wallet btc" :
-                // TODO
+                client.getWalletInBitcoin();
                 break;
 
 
