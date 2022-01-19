@@ -7,6 +7,8 @@ import lombok.Setter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * @author Salvatore Guastella
@@ -23,7 +25,10 @@ public class Post {
 
     @Getter @Setter private int n_iterations = 0;
 
+    private ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 
+    private Lock readLock = readWriteLock.readLock();
+    private Lock writeLock = readWriteLock.writeLock();
 
 
     /**
@@ -32,6 +37,8 @@ public class Post {
      */
     private HashSet<String> rewiners;
 
+
+    private boolean deleted;
 
     public Post(int id, String author, String title, String content,int n_iterations) {
         this.id = id;
@@ -43,6 +50,7 @@ public class Post {
         this.comments = new HashMap<>();
         this.rewiners = new HashSet<>();
         this.n_iterations = n_iterations;
+        this.deleted = false;
     }
 
     public boolean voted(String username) {
@@ -101,9 +109,29 @@ public class Post {
         return rewiners;
     }
 
+    public void lockRead() {
+        readLock.lock();
+    }
 
+    public void unlockRead() {
+        readLock.unlock();
+    }
 
+    public void lockWrite() {
+        writeLock.lock();
+    }
 
+    public void unlockWrite() {
+        writeLock.unlock();
+    }
+
+    public boolean isDeleted() {
+        return deleted;
+    }
+
+    public void setDeleted() {
+        deleted = true;
+    }
 
 
 //    public int incAndGetN_iterations() {

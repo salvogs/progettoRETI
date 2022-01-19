@@ -17,8 +17,12 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * @author Salvatore Guastella
@@ -39,14 +43,17 @@ public class WSServer {
     /**
      * hash table degli utenti registrati
      */
-    private HashMap<String, WSUser> registeredUser;
+    private ConcurrentHashMap<String, WSUser> registeredUser;
 
-    private HashMap<String, ArrayList<WSUser>> allTags;
+    private ConcurrentHashMap<String, ArrayList<String>> allTags;
+    ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 
+    Lock allTagsReadLock = readWriteLock.readLock();
+    Lock allTagsWriteLock = readWriteLock.writeLock();
 
     private RMIServer remoteServer;
 
-    private HashMap<Integer,String> hashUser; // corrispondenza hash ip
+    private ConcurrentHashMap<Integer,String> hashUser; // corrispondenza hash ip
 
     int N_THREAD = 10;
 
@@ -56,7 +63,7 @@ public class WSServer {
 
     Object lock = new Object();
 
-    private HashMap<Integer, Post> posts;
+    private ConcurrentHashMap<Integer, Post> posts;
     private int idPostCounter = 0;
 
 
@@ -66,7 +73,7 @@ public class WSServer {
     JsonGenerator generator;
 
 
-
+    // todo concurrent
 
     private HashMap<Integer, HashSet<String>> newUpvotes;
     private HashMap<Integer, HashSet<String>> newDownvotes;
@@ -93,8 +100,8 @@ public class WSServer {
         this.regPort = regPort;
         this.regServiceName = regServiceName;
 
-        this.registeredUser = new HashMap<>();
-        this.posts = new HashMap<>();
+        this.registeredUser = new ConcurrentHashMap<>();
+        this.posts = new ConcurrentHashMap<>();
 
         this.backupDir = new File("./backup"); // todo parse
         this.usersBackup = new File(backupDir + "/users.json");
@@ -102,9 +109,9 @@ public class WSServer {
 
         restoreBackup(usersBackup,postsBackup);
 
-        this.allTags = new HashMap<>();
-        this.remoteServer = new RMIServer(registeredUser,allTags);
-        this.hashUser = new HashMap<>();
+        this.allTags = new ConcurrentHashMap<>();
+        this.remoteServer = new RMIServer(registeredUser,allTags,allTagsWriteLock);
+        this.hashUser = new ConcurrentHashMap<>();
 
         this.pool = (ThreadPoolExecutor) Executors.newFixedThreadPool(N_THREAD);
 
@@ -148,7 +155,7 @@ public class WSServer {
 
                 registeredUser = mapper.readValue(usersReader,new TypeReference<HashMap<String,WSUser>>() {});
 
-                }
+            }
 
 
 
@@ -185,7 +192,7 @@ public class WSServer {
         return newComments;
     }
 
-    public HashMap<Integer, Post> getPosts() {
+    public ConcurrentHashMap<Integer, Post> getPosts() {
         return posts;
     }
 
@@ -393,29 +400,36 @@ public class WSServer {
 
 
         if (user != null) {
+            user.lockWrite();
             if (!user.alreadyLogged()) {
+                /* non faccio la lock qui ma prima per evitare che un altro client faccia l'accesso
+                    vedendo che nessuno è ancora loggato
+                 */
 
-                if (user.checkPassword(password)) { // ok
+                if (user.checkPassword(password)) {
 
                     user.setLogged(true);
                     user.setSessionId(sessionId);
 
+                    HashSet<String> followers = new HashSet<>(user.getFollowers());
+                    user.unlockWrite();
+
                     hashUser.put(sessionId, username);
+
                     generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
 
                     // invio la lista dei follower
 
-                    if (!user.getFollowers().isEmpty()) {
+                    if (!followers.isEmpty()) {
 
-                        Iterator it = user.getFollowers().iterator();
                         generator.writeArrayFieldStart("followers");
 
-                        while (it.hasNext()) {
+                       for(String f : followers) {
                             generator.writeStartObject();
 
-                            WSUser follower = registeredUser.get(it.next());
+                            WSUser follower = registeredUser.get(f);
 
-                            generator.writeStringField("username", follower.getUsername());
+                            generator.writeStringField("username", f);
                             generator.writeArrayFieldStart("tags");
 
                             for (String t : follower.getTags()) {
@@ -432,10 +446,13 @@ public class WSServer {
                     }
 
                 } else {
+                    user.unlockWrite();
                     generator.writeNumberField("status-code", HttpURLConnection.HTTP_UNAUTHORIZED);
                     generator.writeStringField("message", "credenziali errate");
                 }
             } else {
+                user.unlockWrite();
+
                 generator.writeNumberField("status-code", HttpURLConnection.HTTP_UNAUTHORIZED);
                 generator.writeStringField("message",
                         "c'e' un utente gia' collegato, deve essere prima scollegato");
@@ -465,21 +482,29 @@ public class WSServer {
 
         generator.writeStartObject();
 
-        if(user != null && checkStatus(user) == 0) {
-            if(user.getSessionId() == sessionId) {
+        if(user != null) {
+            user.lockWrite();
+            if(checkStatus(user) == 0) {
+                if(user.getSessionId() == sessionId) {
 
-                hashUser.remove(user.getSessionId());
-                user.setLogged(false);
-                user.setSessionId(-1);
+                    hashUser.remove(sessionId);
+                    user.setLogged(false);
+                    user.setSessionId(-1);
+                    user.setRemoteClient(null);
 
-                user.setRemoteClient(null);
-                generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
+                    user.unlockWrite();
+
+                    generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
 
 
-            } else {
-                generator.writeNumberField("status-code", HttpURLConnection.HTTP_FORBIDDEN);
-                generator.writeStringField("message",
-                        "azione non permessa, non e' possibile disconnettere un altro utente");
+                } else {
+                    user.unlockWrite();
+                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_FORBIDDEN);
+                    generator.writeStringField("message",
+                            "azione non permessa, non e' possibile disconnettere un altro utente");
+                }
+            }else {
+                user.unlockWrite();
             }
 
         }
@@ -493,49 +518,55 @@ public class WSServer {
 
         WSUser user = checkUser(username);
         generator.writeStartObject();
-        if(user != null && checkStatus(user) == 0) {
 
-            // array degli utenti
-            generator.writeArrayFieldStart("users");
+        if(user != null) {
+            if(checkStatus(user) == 0) {
 
-            String[] tags = user.getTags();
-            HashSet<String> written = new HashSet<>();
-            for (String tag : tags) {
+                String[] tags = user.getTags();  // tag per cui si e' registrato l'utente
+                HashSet<String> toWrite = new HashSet<>();
+                // i tag non possono cambiare -> non necessarie lock per scorrerli
+                for (String tag : tags) {
+                    // copia degli utenti registrati con lo stesso tag
 
-                // gli utenti registrati con lo stesso tag
-                ArrayList<WSUser> users = allTags.get(tag);
-                
-                for (WSUser u : users) {
+                    allTagsReadLock.lock(); // potrebbe registrarsi un nuovo utente con gli stessi tag in comune
 
-                    if (!u.getUsername().equals(username) && !written.contains(u.getUsername())) {
+                    ArrayList<String> users = new ArrayList<>(allTags.get(tag));
+
+                    allTagsReadLock.unlock();
+
+                    for (String u : users) {
+                        if (!u.equals(username)) {
+                            toWrite.add(u);
+                        }
+                    }
+                }
+
+                if(toWrite.size() > 0) {
+                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
+                    // array degli utenti
+                    generator.writeArrayFieldStart("users");
+
+                    for(String u : toWrite) {
+                        WSUser uToWrite = registeredUser.get(u);
                         generator.writeStartObject();
-
-                        generator.writeStringField("username",u.getUsername());
+                        generator.writeStringField("username", u);
                         generator.writeArrayFieldStart("tags");
 
-                        for(String t : u.getTags()) {
+                        for (String t : uToWrite.getTags()) {
                             generator.writeString(t);
                         }
-
                         generator.writeEndArray();
-
                         generator.writeEndObject();
-                        written.add(u.getUsername());
                     }
-
+                    generator.writeEndArray();
+                } else {
+                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_NO_CONTENT);
+                    generator.writeStringField("message","nessun utente con tag in comune");
                 }
+            } else {
+                user.unlockRead();
             }
-
-            generator.writeEndArray();
-
-            if(written.isEmpty()) {
-                generator.writeNumberField("status-code", HttpURLConnection.HTTP_NO_CONTENT);
-                generator.writeStringField("message","nessun utente con tag in comune");
-            }else
-                generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
-
         }
-
 
         generator.writeEndObject();
         return jsonResponseToString();
@@ -546,42 +577,48 @@ public class WSServer {
 
         WSUser user = checkUser(username);
         generator.writeStartObject();
-        if(user != null && checkStatus(user) == 0) {
+        if(user != null) {
+            if(checkStatus(user) == 0) {
+                user.lockRead();
+                HashSet<String> followed = new HashSet<>(user.getFollowed()); // copia degli utenti seguiti
+                user.unlockRead();
 
+                if(followed.isEmpty()) {
+                    generator.writeNumberField("status-code",HttpURLConnection.HTTP_NO_CONTENT);
+                    generator.writeStringField("message", "Non segui ancora nessuno");
+                } else {
 
-            HashSet<String> followed = user.getFollowed(); // utenti seguiti
+                    generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
 
-            if(followed.isEmpty()) {
-                generator.writeNumberField("status-code",HttpURLConnection.HTTP_NO_CONTENT);
-                generator.writeStringField("message", "Non segui ancora nessuno");
-            } else {
+                    // array degli utenti
+                    generator.writeArrayFieldStart("users");
 
-                generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
+                    for(String u : followed) {
 
-                // array degli utenti
-                generator.writeArrayFieldStart("users");
+                        WSUser f_user = registeredUser.get(u);
 
-                for(String u : followed) {
+                        /* non faccio alcuna lock perche' gli elementi che leggo (username e tags)
+                            non possono essere modificati ( da altri thread )
+                        * */
 
-                    WSUser f_user = registeredUser.get(u);
+                        generator.writeStartObject();
+                        generator.writeStringField("username",f_user.getUsername());
 
-                    generator.writeStartObject();
-                    generator.writeStringField("username",f_user.getUsername());
+                        generator.writeArrayFieldStart("tags");
 
-                    generator.writeArrayFieldStart("tags");
+                        for(String tag : f_user.getTags()) {
+                            generator.writeString(tag);
+                        }
 
-                    for(String tag : f_user.getTags()) {
-                        generator.writeString(tag);
+                        generator.writeEndArray();
+
+                        generator.writeEndObject();
                     }
 
                     generator.writeEndArray();
-
-                    generator.writeEndObject();
                 }
 
-                generator.writeEndArray();
             }
-
 
         }
 
@@ -594,46 +631,47 @@ public class WSServer {
 
     public String followUser(String username, String toFollow) throws IllegalArgumentException, IOException {
 
-        WSUser user = checkUser(username);
-
         generator.writeStartObject();
-        if(user != null && checkStatus(user) == 0) {
 
-            if(!username.equals(toFollow)) {
+        if(!username.equals(toFollow)) {
+            WSUser user = checkUser(username);
+            WSUser userToFollow = checkUser(toFollow);
 
-                WSUser userToFollow = checkUser(toFollow);
+            if (user != null && userToFollow != null) {
 
-                if(userToFollow != null) {
-                    // se user segue gia' quell'utente non ritorno errori
-                    if(user.getFollowed().contains(toFollow))
-                    {
-                        generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
-                        generator.writeStringField("message", "segui gia' "+toFollow);
-                    } else {
-
-                        user.addFollowed(toFollow);
+                if (checkStatus(user) == 0) {
+                    user.lockWrite();
+                    boolean newFollowed = user.addFollowed(toFollow);
+                    user.unlockWrite();
+                    if (newFollowed == true) {
+                        userToFollow.lockWrite();
                         userToFollow.addFollower(username);
-
-//                        try {
-//                            if(userToFollow.getSessionId() != -1)
-//                                userToFollow.notifyNewFollow(username,user.getTags()); // todo togliere commento
-//                        } catch (RemoteException e) {
-//                            e.printStackTrace();  // todo client termination
-//                        }
+                        userToFollow.unlockWrite();
 
                         generator.writeNumberField("status-code",HttpURLConnection.HTTP_CREATED);
+
+                        try {
+                            if (userToFollow.getSessionId() != -1)
+                                userToFollow.notifyNewFollow(username, user.getTags());
+                        } catch (RemoteException e) {
+                            System.err.println("Impossibile notificare il client");
+                            e.printStackTrace();
+                        }
+
+                    } else {
+                        // se user segue gia' quell'utente non ritorno errori
+                        generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
+                        generator.writeStringField("message", "segui gia' "+toFollow);
                     }
 
-
                 }
-
-
-            } else {
-                generator.writeNumberField("status-code",HttpURLConnection.HTTP_FORBIDDEN);
-                generator.writeStringField("message", "non puoi seguire te stesso");
             }
-
+        } else {
+            generator.writeNumberField("status-code",HttpURLConnection.HTTP_FORBIDDEN);
+            generator.writeStringField("message", "non puoi seguire te stesso");
         }
+
+
 
         generator.writeEndObject();
         return jsonResponseToString();
@@ -644,50 +682,49 @@ public class WSServer {
 
     public String unfollowUser(String username, String toUnfollow) throws IllegalArgumentException, IOException {
 
-        WSUser user = checkUser(username);
-
         generator.writeStartObject();
-        if(user != null && checkStatus(user) == 0) {
 
-            if(!username.equals(toUnfollow)) {
+        if(!username.equals(toUnfollow)) {
+            WSUser user = checkUser(username);
+            WSUser userToUnfollow = checkUser(toUnfollow);
 
-                WSUser userToUnfollow = checkUser(toUnfollow);
+            if (user != null && userToUnfollow != null) {
+                if (checkStatus(user) == 0) {
 
-                if(userToUnfollow != null) {
-                    // se user non segue quell'utente non ritorno errori
-                    if(!user.getFollowed().contains(toUnfollow))
-                    {
-                        generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
-                        generator.writeStringField("message", "non segui "+toUnfollow);
-                    } else {
-
-                        user.removeFollowed(toUnfollow);
+                    user.lockWrite();
+                    boolean wasFollowed = user.removeFollowed(toUnfollow);
+                    user.unlockWrite();
+                    if (wasFollowed == true) {
+                        userToUnfollow.lockWrite();
                         userToUnfollow.removeFollower(username);
+                        userToUnfollow.unlockWrite();
+
+                        generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
 
                         try {
-                            if(userToUnfollow.getSessionId() != -1)
+                            if (userToUnfollow.getSessionId() != -1)
                                 userToUnfollow.notifyNewUnfollow(username);
                         } catch (RemoteException e) {
-                            e.printStackTrace();  // todo client termination
+                            System.err.println("Impossibile notificare il client");
+                            e.printStackTrace();
                         }
-
-                        generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
+                    } else {
+                        // se user non segue quell'utente non ritorno errori
+                        generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
+                        generator.writeStringField("message", "non segui" + toUnfollow);
                     }
-
 
                 }
 
-
-            } else {
-                generator.writeNumberField("status-code",HttpURLConnection.HTTP_FORBIDDEN);
-                generator.writeStringField("message", "non puoi smettere di seguire te stesso");
             }
-
+        } else {
+            generator.writeNumberField("status-code",HttpURLConnection.HTTP_FORBIDDEN);
+            generator.writeStringField("message", "non puoi smettere di seguire te stesso");
         }
 
         generator.writeEndObject();
-
         return jsonResponseToString();
+
 
     }
 
@@ -703,12 +740,13 @@ public class WSServer {
         if(user != null && checkStatus(user) == 0) {
 
             int id = idPostCounter++;
-
             Post p = new Post(id,username,title,content,rewardsIteration);
-
-            user.newPost(p);
-
+            // aggiungo il post alla Map di tutti i post
             posts.put(id,p);
+
+            user.lockWrite();
+            user.newPost(id);
+            user.unlockWrite();
 
             generator.writeNumberField("status-code",HttpURLConnection.HTTP_CREATED);
             generator.writeNumberField("id-post",id);
@@ -730,32 +768,37 @@ public class WSServer {
         if(user != null && checkStatus(user) == 0) {
 
             Post post = checkPost(idPost);
-
             if(post != null) {
-
+                post.lockWrite(); // aspetto se un thread sta leggendo/scrivendo il post
                 if(post.getAuthor().equals(username)) {
+                    user.deletePost(idPost);
+                    post.setDeleted(); // eventuali thread che sono in attesa di fare la rewin si accorgono che il post è già stato cancellato
+                    post.unlockWrite();
+                    // cancello il post dal blog dell'utente
+                    user.lockWrite();
+                    posts.remove(idPost);
+                    user.unlockWrite();
 
-                    // cancello il post dal blog di user
-
-                    user.getBlog().remove(idPost);
+                    HashSet<String> rewiners = post.getRewiners();
 
                     // cancello il post da tutti i blog degli utenti che lo hanno rewinnato
-                    Iterator<String> it = post.getRewiners().iterator();
-
-                    while(it.hasNext()) {
-                        WSUser rewiner = registeredUser.get(it.next());
-                        rewiner.getBlog().remove(idPost);
+                    for(String r : rewiners) {
+                        WSUser rewiner = registeredUser.get(r);
+                        rewiner.lockWrite();
+                        rewiner.deletePost(idPost);
+                        rewiner.unlockWrite();
                     }
 
-                    posts.remove(idPost);
 
                     generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
 
                 } else {
+                    post.unlockWrite();
                     generator.writeNumberField("status-code", HttpURLConnection.HTTP_FORBIDDEN);
                     generator.writeStringField("message",
                             "un post puo' essere cancellato solo dal suo autore");
                 }
+
             }
 
         }
@@ -777,13 +820,22 @@ public class WSServer {
 
             int written = 0;
 
+            /* non mi serve acquisire la lock perchè l'utente non può
+               mandare altre richieste di following prima di ricevere la risposta
+               */
             for(String u : user.getFollowed()) {
 
-                HashSet<Integer> blog = registeredUser.get(u).getBlog();
+                WSUser fUser = registeredUser.get(u);
+
+                // lock dell'utente per evitare che aggiunga/rimuova posts
+                fUser.lockRead();
+
+                HashSet<Integer> blog = fUser.getBlog();
 
                 for(Integer id : blog) {
 
                     Post p = posts.get(id);
+
 
                     generator.writeStartObject();
                     generator.writeNumberField("id-post",p.getId());
@@ -793,6 +845,8 @@ public class WSServer {
 
                     written++;
                 }
+
+                fUser.unlockRead();
 
             }
 
@@ -820,6 +874,8 @@ public class WSServer {
 
         if(user != null && checkStatus(user) == 0) {
 
+            user.lockRead();
+
             HashSet<Integer> blog = user.getBlog();
 
             if(!blog.isEmpty()) {
@@ -829,6 +885,10 @@ public class WSServer {
 
                 for(Integer id : blog) {
 
+                    /* non mi serve fare la lock sul post perchè id,autore e titolo non possono cambiare
+                    * e per cancellare/aggiungere post sul blog è necessaria la lockWrite sull'utente
+                    * N.B. la lockWrite su user può essere acquisita se user ha fatto il rewin del post
+                     */
                     Post p = posts.get(id);
 
                     generator.writeStartObject();
@@ -844,6 +904,8 @@ public class WSServer {
                 generator.writeNumberField("status-code", HttpURLConnection.HTTP_NO_CONTENT);
                 generator.writeStringField("message","non sono presenti post da visualizzare");
             }
+
+            user.unlockRead();
 
         }
 
@@ -861,21 +923,24 @@ public class WSServer {
         if(user != null && checkStatus(user) == 0) {
 
             Post post = checkPost(idPost);
+            if(post != null) {
+                post.lockWrite();
+                // controllo se tra le due istruzioni precedenti un altro thread ha cancellato il post
+                if(!checkDeleted(post) && !checkAuthor(username,post) && checkFeed(user,post)) {
 
-            if(post != null && !checkAuthor(username,post) && checkFeed(user,post)) {
-                if(!checkAuthor(username,post) && checkFeed(user,post)) {
-
-
+                    user.lockWrite(); // per evitare letture inconsistenti alla showFeed e viewBlog
                     if (user.getBlog().add(idPost) == true) {
-
-                        post.addRewiner(username);
                         generator.writeNumberField("status-code", HttpURLConnection.HTTP_CREATED);
                     } else {
                         generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
                         generator.writeStringField("message","post gia' presente nel blog");
                     }
+                    user.unlockWrite();
+
                 }
+                post.unlockWrite();
             }
+
 
         }
 
@@ -893,11 +958,10 @@ public class WSServer {
         if(user != null && checkStatus(user) == 0) {
 
             Post post = checkPost(idPost);
-
             if(post != null) {
+                post.lockWrite();
 
-
-                if(!checkAuthor(username,post) && checkFeed(user,post) && !alreadyVoted(username,post)) {
+                if(!checkDeleted(post) && !checkAuthor(username,post) && checkFeed(user,post) && !alreadyVoted(username,post)) {
 
 
                     if (vote == 1) {
@@ -925,6 +989,8 @@ public class WSServer {
                     generator.writeNumberField("status-code", HttpURLConnection.HTTP_CREATED);
 
                 }
+
+                post.unlockWrite();
             }
 
         }
@@ -947,7 +1013,8 @@ public class WSServer {
             Post post = checkPost(idPost);
 
             if(post != null) {
-                if(!checkAuthor(username,post) && checkFeed(user,post)) {
+                post.lockWrite();
+                if(!checkDeleted(post) && !checkAuthor(username,post) && checkFeed(user,post)) {
                     post.newComment(username, comment);
 
                     // memorizzo nuvo commento
@@ -959,6 +1026,7 @@ public class WSServer {
 
                     generator.writeNumberField("status-code", HttpURLConnection.HTTP_CREATED);
                 }
+                post.lockWrite();
             }
 
         }
@@ -982,13 +1050,15 @@ public class WSServer {
             Post post = checkPost(idPost);
 
             if(post != null) {
+
+                post.lockRead();
+
                 /* va a buon fine se :
                     il post e' di user
                     or il post e' nel blog di user (quindi anche rewinned)
                     or il post e' nel feed di user
                  */
-
-                if(post.getAuthor().equals(username) || user.getBlog().contains(idPost) || checkFeed(user,post)) {
+                if(!checkDeleted(post) && post.getAuthor().equals(username) || user.getBlog().contains(idPost) || checkFeed(user,post)) {
                     generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
                     generator.writeStringField("title",post.getTitle());
                     generator.writeStringField("content",post.getContent());
@@ -1006,6 +1076,7 @@ public class WSServer {
                     }
                     generator.writeEndArray();
                 }
+                post.unlockRead();
             }
         }
 
@@ -1022,6 +1093,8 @@ public class WSServer {
         generator.writeStartObject();
 
         if(user != null && checkStatus(user) == 0) {
+
+            user.lockRead();
 
             generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
 
@@ -1042,7 +1115,7 @@ public class WSServer {
 
                 generator.writeEndArray();
             }
-
+            user.unlockRead();
 
         }
 
@@ -1054,12 +1127,15 @@ public class WSServer {
     public String getWalletInBitcoin(String username) throws IOException {
         WSUser user = checkUser(username);
 
-//        user.getWallet()
-
         generator.writeStartObject();
 
         if(user != null && checkStatus(user) == 0) {
+            user.lockRead();
+            double wincoinWallet =  user.getWallet();
+            user.unlockRead();
+
             double walletBtc =  1.638344810037658 * getExchangeRate();
+//            double walletBtc =  wincoinWallet * getExchangeRate(); todo remove comment
 
             generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
 
@@ -1087,7 +1163,7 @@ public class WSServer {
             if(urlCon.getResponseCode() == HttpURLConnection.HTTP_OK) {
                 BufferedReader in = new BufferedReader(new InputStreamReader(urlCon.getInputStream()));
 
-                StringBuilder s = new StringBuilder();
+//                StringBuilder s = new StringBuilder();
 
                 rate = Double.parseDouble(in.readLine());
                 in.close();
@@ -1224,6 +1300,15 @@ public class WSServer {
 
     }
 
+
+    private boolean checkDeleted(Post p) throws IOException {
+        if(p.isDeleted()){
+            generator.writeNumberField("status-code",HttpURLConnection.HTTP_NOT_FOUND);
+            generator.writeStringField("message", "post "+p.getId()+" non trovato");
+        }
+
+        return false;
+    }
 
     private String jsonResponseToString() throws IOException {
 

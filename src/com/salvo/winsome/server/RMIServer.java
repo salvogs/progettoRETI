@@ -3,30 +3,36 @@ package com.salvo.winsome.server;
 import com.salvo.winsome.RMIClientInterface;
 import com.salvo.winsome.RMIServerInterface;
 
+import java.lang.reflect.Array;
 import java.rmi.RemoteException;
 import java.rmi.server.RemoteServer;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.Lock;
 
 /**
  * @author Salvatore Guastella
  */
 public class RMIServer extends RemoteServer implements RMIServerInterface {
 
-    private HashMap<String,WSUser> registeredUser;
+    private ConcurrentHashMap<String,WSUser> registeredUser;
 
-    private HashMap<String, ArrayList<WSUser>> allTags;
+    private ConcurrentHashMap<String, ArrayList<String>> allTags;
+    private Lock allTagsWriteLock;
 
-    public RMIServer(HashMap<String,WSUser> registeredUser, HashMap<String,ArrayList<WSUser>> allTags) {
+    public RMIServer(ConcurrentHashMap<String,WSUser> registeredUser,
+                     ConcurrentHashMap<String, ArrayList<String>> allTags,
+                     Lock allTagsWriteLock) {
+
         this.registeredUser = registeredUser;
         this.allTags = allTags;
+        this.allTagsWriteLock = allTagsWriteLock;
     }
 
 
 
     @Override
-    public int registerUser(String username, String password, String[] tags) throws RemoteException {
+    public synchronized int registerUser(String username, String password, String[] tags) throws RemoteException {
 
         if(username == null || registeredUser.containsKey(username))
             return -1;
@@ -45,16 +51,19 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
         System.out.println("Registrato nuovo utente: \n username: "+username+"\n password: "+password+"\nlista tag: ");
 
         for (String s : tags){
-            ArrayList<WSUser> tagUser;
+            ArrayList<String> tagUser;
             if((tagUser = allTags.get(s)) != null) { // esiste almeno un utente registrato con il tag s
-
+                allTagsWriteLock.lock();
                 // aggiungo il nuovo utente alla lista degli utenti associati al tag
-                tagUser.add(newUser);
+                tagUser.add(username);
+
+                allTagsWriteLock.unlock();
 
             }else{
                 // nuova entry
                 tagUser = new ArrayList<>();
-                tagUser.add(newUser);
+                tagUser.add(username);
+
                 allTags.put(s,tagUser);
 
             }

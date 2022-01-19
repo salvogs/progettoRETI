@@ -12,6 +12,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @author Salvatore Guastella
@@ -21,13 +22,13 @@ public class BackupHandler implements Runnable{
     File usersBackup;
     File postsBackup;
 
-    private HashMap<String, WSUser> registeredUser;
+    private ConcurrentHashMap<String, WSUser> registeredUser;
 
-    private HashMap<Integer, Post> posts;
+    private ConcurrentHashMap<Integer, Post> posts;
 
 
-    public BackupHandler(HashMap<String, WSUser> registeredUser, File usersBackup,
-                         HashMap<Integer, Post> posts, File postsBackup) {
+    public BackupHandler(ConcurrentHashMap<String, WSUser> registeredUser, File usersBackup,
+                         ConcurrentHashMap<Integer, Post> posts, File postsBackup) {
 
         this.registeredUser = registeredUser;
         this.usersBackup = usersBackup;

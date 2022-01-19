@@ -4,6 +4,7 @@ import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @author Salvatore Guastella
@@ -13,7 +14,7 @@ public class RewardsHandler implements Runnable{
     private static final int TIMEOUT = 30;//tempo in secondi
 
     private WSServer server;
-    private HashMap<Integer,Post> posts;
+    private ConcurrentHashMap<Integer,Post> posts;
     private double authorPercentage = 0.7; // todo config
 
 

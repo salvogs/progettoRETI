@@ -8,6 +8,8 @@ import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import lombok.*;
 
@@ -37,6 +39,11 @@ public class WSUser implements Serializable {
 
     @JsonIgnore @Getter private ArrayList<Transaction> transactions;
 
+
+    private ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
+
+    private Lock readLock = readWriteLock.readLock();
+    private Lock writeLock = readWriteLock.writeLock();
 
     public WSUser(){
         logged = false;
@@ -121,26 +128,37 @@ public class WSUser implements Serializable {
         return this.password.equals(password) ? true : false;
     }
 
-    public void addFollowed(String username) {
-        followed.add(username);
+
+    /**
+     * @return true se e' un nuovo seguito
+     */
+    public boolean addFollowed(String username) {
+        return followed.add(username);
     }
 
-    public void addFollower(String username) {
-        follower.add(username);
+    public boolean addFollower(String username) {
+        return follower.add(username);
     }
 
-    public void removeFollowed(String username) {
-        followed.remove(username);
+
+    /**
+     * @return true se era seguito
+     */
+    public boolean removeFollowed(String username) {
+        return followed.remove(username);
     }
 
     public void removeFollower(String username) {
         follower.remove(username);
     }
 
-    public void newPost(Post p) {
-        blog.add(p.getId());
+    public void newPost(int idPost) {
+        blog.add(idPost);
     }
 
+    public void deletePost(int idPost) {
+        blog.remove(idPost);
+    }
 
 //    /**
 //     * controlla se il post e' stato creato dall'utente
@@ -173,5 +191,21 @@ public class WSUser implements Serializable {
         transactions.add(t);
     }
 
+
+    public void lockRead() {
+        readLock.lock();
+    }
+
+    public void unlockRead() {
+        readLock.unlock();
+    }
+
+    public void lockWrite() {
+        writeLock.lock();
+    }
+
+    public void unlockWrite() {
+        writeLock.unlock();
+    }
 
 }
