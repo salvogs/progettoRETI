@@ -17,38 +17,38 @@ import lombok.*;
  * @author Salvatore Guastella
  */
 //@NoArgsConstructor
-public class WSUser implements Serializable {
 
-    @Getter @Setter private String username;
-    @Getter @Setter private String password;
-    @Getter @Setter private String[] tags;
-    @JsonIgnore private boolean logged;
+public @Getter @Setter class WSUser implements Serializable {
+
+    private String username;
+    private String password;
+    private String[] tags;
+
+    private HashSet<String> followers;
+    private HashSet<String> followed;
+
+
+    private HashSet<Integer> blog; //salvo gli id dei post creati dall'utente
+
+    private double wallet;
+    private ArrayList<Transaction> transactions;
+
+    @JsonIgnore private boolean logged = false;
     @JsonIgnore private RMIClientInterface remoteClient;
 
     @JsonIgnore private int sessionId;
 
 
-    @Getter @Setter private HashSet<String> follower;
-    @Getter @Setter private HashSet<String> followed;
+    @JsonIgnore private ReentrantReadWriteLock readWriteLock;
 
-
-    @Getter @Setter private HashSet<Integer> blog; //salvo gli id dei post creati dall'utente
-
-    @Getter @Setter private double wallet;
-
-
-    @JsonIgnore @Getter private ArrayList<Transaction> transactions;
-
-
-    private ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
-
-    private Lock readLock = readWriteLock.readLock();
-    private Lock writeLock = readWriteLock.writeLock();
+    @JsonIgnore private Lock readLock;
+    @JsonIgnore private Lock writeLock;
 
     public WSUser(){
-        logged = false;
-        remoteClient = null;
         sessionId = -1;
+        readWriteLock = new ReentrantReadWriteLock();
+        readLock = readWriteLock.readLock();
+        writeLock = readWriteLock.writeLock();
     }
 
     /**
@@ -67,7 +67,7 @@ public class WSUser implements Serializable {
 
         this.remoteClient = null;
 
-        this.follower = new HashSet<>();
+        this.followers = new HashSet<>();
         this.followed = new HashSet<>();
 
         this.blog = new HashSet<>();
@@ -83,12 +83,6 @@ public class WSUser implements Serializable {
         wallet += reward;
     }
 
-
-    public void setRemoteClient(RMIClientInterface remoteClient) {
-        this.remoteClient = remoteClient;
-    }
-
-
     // notifica quando l'utente ha un nuovo follower
     public void notifyNewFollow(String user, String[] tags) throws RemoteException {
         remoteClient.newFollow(user,tags);
@@ -98,30 +92,8 @@ public class WSUser implements Serializable {
         remoteClient.newUnfollow(user);
     }
 
-
-    public void setLogged(boolean b) {
-        this.logged = b;
-    }
-
     public boolean alreadyLogged(){
         return this.logged;
-    };
-
-    public String getUsername() {
-        return username;
-    }
-
-    public String[] getTags() {
-        return tags;
-    }
-
-
-    public HashSet<String> getFollowers() {
-        return follower;
-    }
-
-    public HashSet<String> getFollowed() {
-        return followed;
     }
 
     public boolean checkPassword(String password){
@@ -137,7 +109,7 @@ public class WSUser implements Serializable {
     }
 
     public boolean addFollower(String username) {
-        return follower.add(username);
+        return followers.add(username);
     }
 
 
@@ -149,7 +121,7 @@ public class WSUser implements Serializable {
     }
 
     public void removeFollower(String username) {
-        follower.remove(username);
+        followers.remove(username);
     }
 
     public void newPost(int idPost) {
@@ -160,32 +132,7 @@ public class WSUser implements Serializable {
         blog.remove(idPost);
     }
 
-//    /**
-//     * controlla se il post e' stato creato dall'utente
-//     * (quindi se appartiene al suo blog) e lo cancella
-//     *
-//     * @return true se il post e' stato cancellato con successo, false altrimenti
-//     */
-//    public boolean deletePost(int id) {
-//        if(blog.remove(id) == true)
-//            return true;
-//
-//        return false;
-//
-//    }
 
-
-    public void setSessionId(int sessionId) {
-        this.sessionId = sessionId;
-    }
-
-    public int getSessionId() {
-        return sessionId;
-    }
-
-    public HashSet<Integer> getBlog() {
-        return blog;
-    }
 
     public void addTranstaction(Transaction t) {
         transactions.add(t);

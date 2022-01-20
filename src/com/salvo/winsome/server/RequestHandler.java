@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -63,7 +64,8 @@ public class RequestHandler implements Runnable{
 
     public void run() {
         System.out.println(request);
-        String response = "{\n  \"status-code\" : 400,\n  \"message\" : \"bad request\"\n}";
+        boolean badReq = false;
+        ObjectNode response = null;
         try {
 
 //            JsonToken token = parser.nextToken();
@@ -293,16 +295,17 @@ public class RequestHandler implements Runnable{
 
         } catch (IOException e) {
             System.err.println("parsing richiesta fallito");
-            response = "{\n  \"status-code\" : 400,\n  \"message\" : \"bad request\"\n}";
+            badReq = true;
             e.printStackTrace();
         }
 
 
         try {
 
-            sendResponse(response);  // potrebbe anche inviare 400 BAD_REQUEST
+            sendResponse(badReq ? "{\n  \"status-code\" : 400,\n  \"message\" : \"bad request\"\n}"
+                    : mapper.writeValueAsString(response));
 
-            System.out.println(response);
+            System.out.println(mapper.writeValueAsString(response));
 
 
         } catch (IOException e) {

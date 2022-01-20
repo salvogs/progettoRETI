@@ -3,11 +3,20 @@ package com.salvo.winsome.server;
 import com.fasterxml.jackson.core.JsonEncoding;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.salvo.winsome.RMIServerInterface;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.experimental.PackagePrivate;
 
 import java.io.*;
+import java.lang.reflect.Array;
 import java.net.*;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
@@ -43,11 +52,12 @@ public class WSServer {
     /**
      * hash table degli utenti registrati
      */
+
     private ConcurrentHashMap<String, WSUser> registeredUser;
 
     private ConcurrentHashMap<String, ArrayList<String>> allTags;
-    ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 
+    ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
     Lock allTagsReadLock = readWriteLock.readLock();
     Lock allTagsWriteLock = readWriteLock.writeLock();
 
@@ -55,7 +65,7 @@ public class WSServer {
 
     private ConcurrentHashMap<Integer,String> hashUser; // corrispondenza hash ip
 
-    int N_THREAD = 10;
+    int N_THREAD = 10; // todo config
 
     private ThreadPoolExecutor pool;
 
@@ -64,13 +74,10 @@ public class WSServer {
     Object lock = new Object();
 
     private ConcurrentHashMap<Integer, Post> posts;
-    private int idPostCounter = 0;
 
 
-    ObjectMapper mapper = new ObjectMapper();
-    JsonFactory jfactory = new JsonFactory();
-    ByteArrayOutputStream responseStream;
-    JsonGenerator generator;
+    ObjectMapper mapper;
+
 
 
     // todo concurrent
@@ -79,6 +86,7 @@ public class WSServer {
     private HashMap<Integer, HashSet<String>> newDownvotes;
     private HashMap<Integer, ArrayList<String>> newComments;
 
+    private int idPostCounter;
     private int rewardsIteration;
     private int idTransactionsCounter;
     private double lastExchangeRate;
@@ -86,6 +94,8 @@ public class WSServer {
     private File backupDir;
     private File usersBackup;
     private File postsBackup;
+    private File tagsBackup;
+    private File variablesBackup;
 
 
 
@@ -100,29 +110,33 @@ public class WSServer {
         this.regPort = regPort;
         this.regServiceName = regServiceName;
 
-        this.registeredUser = new ConcurrentHashMap<>();
-        this.posts = new ConcurrentHashMap<>();
 
-        this.backupDir = new File("./backup"); // todo parse
+        mapper = new ObjectMapper();
+        mapper.enable(SerializationFeature.INDENT_OUTPUT);
+
+
+        this.backupDir = new File("./backup");
         this.usersBackup = new File(backupDir + "/users.json");
         this.postsBackup = new File(backupDir + "/posts.json");
+        this.tagsBackup = new File(backupDir + "./tags.json");
+        this.variablesBackup = new File(backupDir + "./variables.json");
 
-        restoreBackup(usersBackup,postsBackup);
 
-        this.allTags = new ConcurrentHashMap<>();
+        if(restoreBackup() == -1) {
+            this.registeredUser = new ConcurrentHashMap<>();
+            this.posts = new ConcurrentHashMap<>();
+            this.allTags = new ConcurrentHashMap<>();
+            this.idPostCounter = 0;
+            this.rewardsIteration = 0;
+            this.idTransactionsCounter = 0;
+            this.lastExchangeRate = 0;
+        }
+
         this.remoteServer = new RMIServer(registeredUser,allTags,allTagsWriteLock);
         this.hashUser = new ConcurrentHashMap<>();
 
         this.pool = (ThreadPoolExecutor) Executors.newFixedThreadPool(N_THREAD);
 
-        mapper = new ObjectMapper();
-        responseStream = new ByteArrayOutputStream();
-        try {
-            this.generator = jfactory.createGenerator(responseStream, JsonEncoding.UTF8);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        this.generator.useDefaultPrettyPrinter();
 
 
         this.newUpvotes = new HashMap<>();
@@ -130,48 +144,46 @@ public class WSServer {
         this.newComments = new HashMap<>();
 
 
-        this.rewardsIteration = 0;
-        this.idTransactionsCounter = 0;
-
-        this.lastExchangeRate = 0;
     }
 
 
-    private void restoreBackup(File usersBackup,File postsBackup) {
+    private int restoreBackup() {
 
-        if(!backupDir.exists()) // se la directory non esiste la creo
-            backupDir.mkdir();
-
-
-
-        try {
-
-            if(!usersBackup.exists()) {
-                usersBackup.createNewFile();
-
-            } else if(usersBackup.length() > 0){
-
-                BufferedReader usersReader = new BufferedReader(new FileReader(usersBackup));
-
-                registeredUser = mapper.readValue(usersReader,new TypeReference<HashMap<String,WSUser>>() {});
-
-            }
+        if(backupDir.isDirectory() && usersBackup.isFile() && postsBackup.isFile()
+                && tagsBackup.isFile() && variablesBackup.isFile()) {
 
 
 
-
-            if(!postsBackup.exists()) {
-                postsBackup.createNewFile();
-
-            } else if(postsBackup.length() > 0){
+            try(BufferedReader usersReader = new BufferedReader(new FileReader(usersBackup));
                 BufferedReader postsReader = new BufferedReader(new FileReader(postsBackup));
-                posts = mapper.readValue(postsReader,new TypeReference<HashMap<Integer,Post>>() {});
-//                postsReader.close();
+                BufferedReader tagsReader = new BufferedReader(new FileReader(tagsBackup));
+                BufferedReader variableReader = new BufferedReader(new FileReader(variablesBackup))
+            ) {
+
+
+                registeredUser = mapper.readValue(usersReader, new TypeReference<ConcurrentHashMap<String, WSUser>>() {});
+                posts = mapper.readValue(postsReader, new TypeReference<ConcurrentHashMap<Integer, Post>>() {});
+                allTags = mapper.readValue(tagsReader, new TypeReference<ConcurrentHashMap<String, ArrayList<String>>>() {});
+
+                JsonNode variables = mapper.readTree(variableReader);
+
+                idPostCounter = variables.get("idpostcounter").asInt();
+                rewardsIteration = variables.get("rewardsiteration").asInt();
+                idTransactionsCounter = variables.get("idtransactionscounter").asInt();
+                lastExchangeRate = variables.get("lastexchangerate").asDouble();
+
+                return 0;
+
+            } catch (Exception e) {
+                System.err.println("Impossibile leggere backup");
+                e.printStackTrace();
+                return -1;
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-            System.exit(-1);
+
         }
+
+        System.err.println("Impossibile leggere backup");
+        return -1;
 
     }
 
@@ -213,9 +225,7 @@ public class WSServer {
 
 
         // creo e avvio thread per la gestione del backup
-
-
-        Thread backupThread = new Thread(new BackupHandler(registeredUser,usersBackup,posts,postsBackup));
+        Thread backupThread = new Thread(new BackupHandler(this));
         backupThread.start();
 
 
@@ -389,15 +399,14 @@ public class WSServer {
 
 
 
-    public String login(String username, String password, int sessionId) throws IllegalArgumentException, IOException {
+    public ObjectNode login(String username, String password, int sessionId) throws IllegalArgumentException {
 
         if (password == null || sessionId < 0)
             throw new IllegalArgumentException();
 
-        generator.writeStartObject();
+        ObjectNode response = mapper.createObjectNode();
 
-        WSUser user = checkUser(username);
-
+        WSUser user = checkUser(username,response);
 
         if (user != null) {
             user.lockWrite();
@@ -416,55 +425,51 @@ public class WSServer {
 
                     hashUser.put(sessionId, username);
 
-                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
+                    response.put("status-code", HttpURLConnection.HTTP_OK);
 
                     // invio la lista dei follower
 
                     if (!followers.isEmpty()) {
 
-                        generator.writeArrayFieldStart("followers");
+                        ArrayNode fArray = mapper.createArrayNode();
 
                        for(String f : followers) {
-                            generator.writeStartObject();
+
+                           ObjectNode fObject = mapper.createObjectNode();
 
                             WSUser follower = registeredUser.get(f);
 
-                            generator.writeStringField("username", f);
-                            generator.writeArrayFieldStart("tags");
+                            fObject.put("username", f);
+                            ArrayNode tArray = mapper.createArrayNode();
 
                             for (String t : follower.getTags()) {
-                                generator.writeString(t);
+                                tArray.add(t);
                             }
+                            fObject.set("tags",tArray);
 
-                            generator.writeEndArray();
+                            fArray.add(fObject);
 
-                            generator.writeEndObject();
-                        }
+                       }
 
-                        generator.writeEndArray();
-
+                       response.set("followers",fArray);
                     }
 
                 } else {
                     user.unlockWrite();
-                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_UNAUTHORIZED);
-                    generator.writeStringField("message", "credenziali errate");
+                    response.put("status-code", HttpURLConnection.HTTP_UNAUTHORIZED);
+                    response.put("message", "credenziali errate");
                 }
             } else {
                 user.unlockWrite();
 
-                generator.writeNumberField("status-code", HttpURLConnection.HTTP_UNAUTHORIZED);
-                generator.writeStringField("message",
+                response.put("status-code", HttpURLConnection.HTTP_UNAUTHORIZED);
+                response.put("message",
                         "c'e' un utente gia' collegato, deve essere prima scollegato");
             }
     }
 
 
-
-        generator.writeEndObject();
-
-        return jsonResponseToString();
-
+        return response;
 
     }
 
@@ -476,15 +481,15 @@ public class WSServer {
      * @return
      * @throws IllegalArgumentException
      */
-    public String logout(String username, int sessionId) throws IllegalArgumentException, IOException {
+    public ObjectNode logout(String username, int sessionId) throws IllegalArgumentException {
 
-        WSUser user = checkUser(username);
+        ObjectNode response = mapper.createObjectNode();
 
-        generator.writeStartObject();
+        WSUser user = checkUser(username,response);
 
         if(user != null) {
             user.lockWrite();
-            if(checkStatus(user) == 0) {
+            if(checkStatus(user,response) == 0) {
                 if(user.getSessionId() == sessionId) {
 
                     hashUser.remove(sessionId);
@@ -494,13 +499,12 @@ public class WSServer {
 
                     user.unlockWrite();
 
-                    generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
-
+                    response.put("status-code",HttpURLConnection.HTTP_OK);
 
                 } else {
                     user.unlockWrite();
-                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_FORBIDDEN);
-                    generator.writeStringField("message",
+                    response.put("status-code", HttpURLConnection.HTTP_FORBIDDEN);
+                    response.put("message",
                             "azione non permessa, non e' possibile disconnettere un altro utente");
                 }
             }else {
@@ -508,19 +512,21 @@ public class WSServer {
             }
 
         }
-        generator.writeEndObject();
-        return jsonResponseToString();
+
+        return response;
 
     }
 
 
-    public String listUsers(String username) throws IllegalArgumentException, IOException {
+    public ObjectNode listUsers(String username) throws IllegalArgumentException {
 
-        WSUser user = checkUser(username);
-        generator.writeStartObject();
+        ObjectNode response = mapper.createObjectNode();
+
+        WSUser user = checkUser(username,response);
+
 
         if(user != null) {
-            if(checkStatus(user) == 0) {
+            if(checkStatus(user,response) == 0) {
 
                 String[] tags = user.getTags();  // tag per cui si e' registrato l'utente
                 HashSet<String> toWrite = new HashSet<>();
@@ -542,80 +548,77 @@ public class WSServer {
                 }
 
                 if(toWrite.size() > 0) {
-                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
+                    response.put("status-code", HttpURLConnection.HTTP_OK);
                     // array degli utenti
-                    generator.writeArrayFieldStart("users");
-
+                    ArrayNode uArray = mapper.createArrayNode();
                     for(String u : toWrite) {
                         WSUser uToWrite = registeredUser.get(u);
-                        generator.writeStartObject();
-                        generator.writeStringField("username", u);
-                        generator.writeArrayFieldStart("tags");
 
+                        ObjectNode uObject = mapper.createObjectNode();
+                        uObject.put("username", u);
+
+                        ArrayNode tArray = mapper.createArrayNode();
                         for (String t : uToWrite.getTags()) {
-                            generator.writeString(t);
+                            tArray.add(t);
                         }
-                        generator.writeEndArray();
-                        generator.writeEndObject();
+                        uObject.set("tags",tArray);
+                        uArray.add(uObject);
                     }
-                    generator.writeEndArray();
+                    response.set("users",uArray);
+
                 } else {
-                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_NO_CONTENT);
-                    generator.writeStringField("message","nessun utente con tag in comune");
+                    response.put("status-code", HttpURLConnection.HTTP_NO_CONTENT);
+                    response.put("message","nessun utente con tag in comune");
                 }
             } else {
                 user.unlockRead();
             }
         }
 
-        generator.writeEndObject();
-        return jsonResponseToString();
+        return response;
 
     }
 
-    public String listFollowing(String username) throws IllegalArgumentException, IOException {
+    public ObjectNode listFollowing(String username) throws IllegalArgumentException{
 
-        WSUser user = checkUser(username);
-        generator.writeStartObject();
+        ObjectNode response = mapper.createObjectNode();
+
+        WSUser user = checkUser(username,response);
+
         if(user != null) {
-            if(checkStatus(user) == 0) {
-                user.lockRead();
-                HashSet<String> followed = new HashSet<>(user.getFollowed()); // copia degli utenti seguiti
-                user.unlockRead();
+            if(checkStatus(user,response) == 0) {
+
+                HashSet<String> followed = user.getFollowed(); // non mi serve alcuna lock
 
                 if(followed.isEmpty()) {
-                    generator.writeNumberField("status-code",HttpURLConnection.HTTP_NO_CONTENT);
-                    generator.writeStringField("message", "Non segui ancora nessuno");
+                    response.put("status-code",HttpURLConnection.HTTP_NO_CONTENT);
+                    response.put("message", "Non segui ancora nessuno");
                 } else {
 
-                    generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
+                    response.put("status-code",HttpURLConnection.HTTP_OK);
 
                     // array degli utenti
-                    generator.writeArrayFieldStart("users");
+                    ArrayNode uArray = mapper.createArrayNode();
 
                     for(String u : followed) {
 
                         WSUser f_user = registeredUser.get(u);
-
+                        ObjectNode uObject = mapper.createObjectNode();
                         /* non faccio alcuna lock perche' gli elementi che leggo (username e tags)
                             non possono essere modificati ( da altri thread )
                         * */
+                        uObject.put("username",f_user.getUsername());
 
-                        generator.writeStartObject();
-                        generator.writeStringField("username",f_user.getUsername());
-
-                        generator.writeArrayFieldStart("tags");
-
-                        for(String tag : f_user.getTags()) {
-                            generator.writeString(tag);
+                        ArrayNode tArray = mapper.createArrayNode();
+                        for (String tag : f_user.getTags()) {
+                            tArray.add(tag);
                         }
+                        uObject.set("tags",tArray);
+                        uArray.add(uObject);
 
-                        generator.writeEndArray();
-
-                        generator.writeEndObject();
                     }
+                    response.set("users",uArray);
 
-                    generator.writeEndArray();
                 }
 
             }
@@ -623,23 +626,22 @@ public class WSServer {
         }
 
 
-        generator.writeEndObject();
-        return jsonResponseToString();
+        return response;
 
     }
 
 
-    public String followUser(String username, String toFollow) throws IllegalArgumentException, IOException {
+    public ObjectNode followUser(String username, String toFollow) throws IllegalArgumentException {
 
-        generator.writeStartObject();
+        ObjectNode response = mapper.createObjectNode();
 
         if(!username.equals(toFollow)) {
-            WSUser user = checkUser(username);
-            WSUser userToFollow = checkUser(toFollow);
+            WSUser user = checkUser(username,response);
+            WSUser userToFollow = checkUser(toFollow,response);
 
             if (user != null && userToFollow != null) {
 
-                if (checkStatus(user) == 0) {
+                if (checkStatus(user,response) == 0) {
                     user.lockWrite();
                     boolean newFollowed = user.addFollowed(toFollow);
                     user.unlockWrite();
@@ -648,7 +650,7 @@ public class WSServer {
                         userToFollow.addFollower(username);
                         userToFollow.unlockWrite();
 
-                        generator.writeNumberField("status-code",HttpURLConnection.HTTP_CREATED);
+                        response.put("status-code",HttpURLConnection.HTTP_CREATED);
 
                         try {
                             if (userToFollow.getSessionId() != -1)
@@ -660,36 +662,34 @@ public class WSServer {
 
                     } else {
                         // se user segue gia' quell'utente non ritorno errori
-                        generator.writeNumberField("status-code",HttpURLConnection.HTTP_OK);
-                        generator.writeStringField("message", "segui gia' "+toFollow);
+                        response.put("status-code",HttpURLConnection.HTTP_OK);
+                        response.put("message", "segui gia' "+toFollow);
                     }
 
                 }
             }
         } else {
-            generator.writeNumberField("status-code",HttpURLConnection.HTTP_FORBIDDEN);
-            generator.writeStringField("message", "non puoi seguire te stesso");
+            response.put("status-code",HttpURLConnection.HTTP_FORBIDDEN);
+            response.put("message", "non puoi seguire te stesso");
         }
 
 
-
-        generator.writeEndObject();
-        return jsonResponseToString();
+        return response;
 
 
 
     }
 
-    public String unfollowUser(String username, String toUnfollow) throws IllegalArgumentException, IOException {
+    public ObjectNode unfollowUser(String username, String toUnfollow) throws IllegalArgumentException{
 
-        generator.writeStartObject();
+        ObjectNode response = mapper.createObjectNode();
 
         if(!username.equals(toUnfollow)) {
-            WSUser user = checkUser(username);
-            WSUser userToUnfollow = checkUser(toUnfollow);
+            WSUser user = checkUser(username,response);
+            WSUser userToUnfollow = checkUser(toUnfollow,response);
 
             if (user != null && userToUnfollow != null) {
-                if (checkStatus(user) == 0) {
+                if (checkStatus(user,response) == 0) {
 
                     user.lockWrite();
                     boolean wasFollowed = user.removeFollowed(toUnfollow);
@@ -699,7 +699,7 @@ public class WSServer {
                         userToUnfollow.removeFollower(username);
                         userToUnfollow.unlockWrite();
 
-                        generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
+                        response.put("status-code", HttpURLConnection.HTTP_OK);
 
                         try {
                             if (userToUnfollow.getSessionId() != -1)
@@ -710,34 +710,34 @@ public class WSServer {
                         }
                     } else {
                         // se user non segue quell'utente non ritorno errori
-                        generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
-                        generator.writeStringField("message", "non segui" + toUnfollow);
+                        response.put("status-code", HttpURLConnection.HTTP_OK);
+                        response.put("message", "non segui" + toUnfollow);
                     }
 
                 }
 
             }
         } else {
-            generator.writeNumberField("status-code",HttpURLConnection.HTTP_FORBIDDEN);
-            generator.writeStringField("message", "non puoi smettere di seguire te stesso");
+            response.put("status-code",HttpURLConnection.HTTP_FORBIDDEN);
+            response.put("message", "non puoi smettere di seguire te stesso");
         }
 
-        generator.writeEndObject();
-        return jsonResponseToString();
+        return response;
 
 
     }
 
-    public String createPost(String username, String title, String content) throws IllegalArgumentException, IOException {
+    public ObjectNode createPost(String username, String title, String content) throws IllegalArgumentException {
 
         if(title == null || content == null)
             throw new IllegalArgumentException();
 
-        WSUser user = checkUser(username);
 
-        generator.writeStartObject();
+        ObjectNode response = mapper.createObjectNode();
 
-        if(user != null && checkStatus(user) == 0) {
+        WSUser user = checkUser(username,response);
+
+        if(user != null && checkStatus(user,response) == 0) {
 
             int id = idPostCounter++;
             Post p = new Post(id,username,title,content,rewardsIteration);
@@ -748,35 +748,37 @@ public class WSServer {
             user.newPost(id);
             user.unlockWrite();
 
-            generator.writeNumberField("status-code",HttpURLConnection.HTTP_CREATED);
-            generator.writeNumberField("id-post",id);
+            response.put("status-code",HttpURLConnection.HTTP_CREATED);
+            response.put("id-post",id);
 
         }
 
-        generator.writeEndObject();
 
-        return jsonResponseToString();
+        return response;
 
     }
 
-    public String deletePost(String username, int idPost) throws IOException {
+    public ObjectNode deletePost(String username, int idPost) throws IllegalArgumentException{
 
-        WSUser user = checkUser(username);
+        ObjectNode response = mapper.createObjectNode();
 
-        generator.writeStartObject();
+        WSUser user = checkUser(username,response);
 
-        if(user != null && checkStatus(user) == 0) {
 
-            Post post = checkPost(idPost);
+        if(user != null && checkStatus(user,response) == 0) {
+
+            Post post = checkPost(idPost,response);
             if(post != null) {
                 post.lockWrite(); // aspetto se un thread sta leggendo/scrivendo il post
                 if(post.getAuthor().equals(username)) {
-                    user.deletePost(idPost);
+
                     post.setDeleted(); // eventuali thread che sono in attesa di fare la rewin si accorgono che il post è già stato cancellato
                     post.unlockWrite();
-                    // cancello il post dal blog dell'utente
+
+
                     user.lockWrite();
-                    posts.remove(idPost);
+                    // cancello il post dal blog dell'utente
+                    user.deletePost(idPost);
                     user.unlockWrite();
 
                     HashSet<String> rewiners = post.getRewiners();
@@ -789,13 +791,14 @@ public class WSServer {
                         rewiner.unlockWrite();
                     }
 
+                    posts.remove(idPost);
 
-                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
+                    response.put("status-code", HttpURLConnection.HTTP_OK);
 
                 } else {
                     post.unlockWrite();
-                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_FORBIDDEN);
-                    generator.writeStringField("message",
+                    response.put("status-code", HttpURLConnection.HTTP_FORBIDDEN);
+                    response.put("message",
                             "un post puo' essere cancellato solo dal suo autore");
                 }
 
@@ -803,20 +806,19 @@ public class WSServer {
 
         }
 
-        generator.writeEndObject();
-        return jsonResponseToString();
+        return response;
     }
 
 
-    public String showFeed(String username) throws IOException {
+    public ObjectNode showFeed(String username) throws IllegalArgumentException{
 
-        WSUser user = checkUser(username);
+        ObjectNode response = mapper.createObjectNode();
 
-        generator.writeStartObject();
+        WSUser user = checkUser(username,response);
 
-        if(user != null && checkStatus(user) == 0) {
+        if(user != null && checkStatus(user,response) == 0) {
 
-            generator.writeArrayFieldStart("feed");
+            ArrayNode pArray = mapper.createArrayNode();
 
             int written = 0;
 
@@ -835,13 +837,13 @@ public class WSServer {
                 for(Integer id : blog) {
 
                     Post p = posts.get(id);
+                    ObjectNode pObject = mapper.createObjectNode();
 
+                    pObject.put("id-post",p.getId());
+                    pObject.put("author",p.getAuthor());
+                    pObject.put("title",p.getTitle());
 
-                    generator.writeStartObject();
-                    generator.writeNumberField("id-post",p.getId());
-                    generator.writeStringField("author",p.getAuthor());
-                    generator.writeStringField("title",p.getTitle());
-                    generator.writeEndObject();
+                    pArray.add(pObject);
 
                     written++;
                 }
@@ -850,90 +852,86 @@ public class WSServer {
 
             }
 
-            generator.writeEndArray();
-
-            if(written == 0) {
-                generator.writeNumberField("status-code", HttpURLConnection.HTTP_NO_CONTENT);
-                generator.writeStringField("message","non sono presenti post da visualizzare");
-            }else
-                generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
+            if(pArray.size() == 0) {
+                response.put("status-code", HttpURLConnection.HTTP_NO_CONTENT);
+                response.put("message","non sono presenti post da visualizzare");
+            }else {
+                response.put("status-code", HttpURLConnection.HTTP_OK);
+                response.set("feed",pArray);
+            }
 
 
         }
 
-        generator.writeEndObject();
-
-        return jsonResponseToString();
+       return response;
 
     }
 
-    public String viewBlog(String username) throws IOException {
-        WSUser user = checkUser(username);
+    public ObjectNode viewBlog(String username) throws IllegalArgumentException{
 
-        generator.writeStartObject();
+        ObjectNode response = mapper.createObjectNode();
 
-        if(user != null && checkStatus(user) == 0) {
+        WSUser user = checkUser(username,response);
+
+        if(user != null && checkStatus(user,response) == 0) {
 
             user.lockRead();
 
             HashSet<Integer> blog = user.getBlog();
 
             if(!blog.isEmpty()) {
-                generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
+                response.put("status-code", HttpURLConnection.HTTP_OK);
 
-                generator.writeArrayFieldStart("blog");
+                ArrayNode pArray = mapper.createArrayNode();
 
                 for(Integer id : blog) {
-
                     /* non mi serve fare la lock sul post perchè id,autore e titolo non possono cambiare
                     * e per cancellare/aggiungere post sul blog è necessaria la lockWrite sull'utente
                     * N.B. la lockWrite su user può essere acquisita se user ha fatto il rewin del post
                      */
                     Post p = posts.get(id);
+                    ObjectNode pObject = mapper.createObjectNode();
+                    pObject.put("id-post",p.getId());
+                    pObject.put("author",p.getAuthor());
+                    pObject.put("title",p.getTitle());
 
-                    generator.writeStartObject();
-                    generator.writeNumberField("id-post",p.getId());
-                    generator.writeStringField("author",p.getAuthor());
-                    generator.writeStringField("title",p.getTitle());
-                    generator.writeEndObject();
-
+                    pArray.add(pObject);
                 }
-                generator.writeEndArray();
+                response.set("blog",pArray);
 
             } else {
-                generator.writeNumberField("status-code", HttpURLConnection.HTTP_NO_CONTENT);
-                generator.writeStringField("message","non sono presenti post da visualizzare");
+                response.put("status-code", HttpURLConnection.HTTP_NO_CONTENT);
+                response.put("message","non sono presenti post da visualizzare");
             }
 
             user.unlockRead();
 
         }
 
-        generator.writeEndObject();
 
-        return jsonResponseToString();
+        return response;
     }
 
-    public String rewinPost(String username, int idPost) throws IOException {
+    public ObjectNode rewinPost(String username, int idPost) throws IllegalArgumentException{
 
-        WSUser user = checkUser(username);
+        ObjectNode response = mapper.createObjectNode();
 
-        generator.writeStartObject();
+        WSUser user = checkUser(username,response);
 
-        if(user != null && checkStatus(user) == 0) {
+        if(user != null && checkStatus(user,response) == 0) {
 
-            Post post = checkPost(idPost);
+            Post post = checkPost(idPost,response);
             if(post != null) {
                 post.lockWrite();
                 // controllo se tra le due istruzioni precedenti un altro thread ha cancellato il post
-                if(!checkDeleted(post) && !checkAuthor(username,post) && checkFeed(user,post)) {
-
+                if(!checkDeleted(post,response) && !checkAuthor(username,post,response) && checkFeed(user,post,response)) {
                     user.lockWrite(); // per evitare letture inconsistenti alla showFeed e viewBlog
                     if (user.getBlog().add(idPost) == true) {
-                        generator.writeNumberField("status-code", HttpURLConnection.HTTP_CREATED);
+                        post.addRewiner(username);
+                        response.put("status-code", HttpURLConnection.HTTP_CREATED);
                     } else {
-                        generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
-                        generator.writeStringField("message","post gia' presente nel blog");
+                        response.put("status-code", HttpURLConnection.HTTP_OK);
+                        response.put("message","post gia' presente nel blog");
                     }
                     user.unlockWrite();
 
@@ -944,24 +942,23 @@ public class WSServer {
 
         }
 
-        generator.writeEndObject();
 
-        return jsonResponseToString();
+        return response;
     }
 
-    public String ratePost(String username, int idPost, int vote) throws IOException {
+    public ObjectNode ratePost(String username, int idPost, int vote) throws IllegalArgumentException{
 
-        WSUser user = checkUser(username);
+        ObjectNode response = mapper.createObjectNode();
 
-        generator.writeStartObject();
+        WSUser user = checkUser(username,response);
 
-        if(user != null && checkStatus(user) == 0) {
+        if(user != null && checkStatus(user,response) == 0) {
 
-            Post post = checkPost(idPost);
+            Post post = checkPost(idPost,response);
             if(post != null) {
                 post.lockWrite();
 
-                if(!checkDeleted(post) && !checkAuthor(username,post) && checkFeed(user,post) && !alreadyVoted(username,post)) {
+                if(!checkDeleted(post,response) && !checkAuthor(username,post,response) && checkFeed(user,post,response) && !alreadyVoted(username,post,response)) {
 
 
                     if (vote == 1) {
@@ -986,7 +983,7 @@ public class WSServer {
                         newDownvotes.get(idPost).add(username); // aggiungo l'username al set dei votanti
                     }
 
-                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_CREATED);
+                    response.put("status-code", HttpURLConnection.HTTP_CREATED);
 
                 }
 
@@ -995,26 +992,26 @@ public class WSServer {
 
         }
 
-        generator.writeEndObject();
 
-        return jsonResponseToString();
+        return response;
 
 
     }
 
-    public String commentPost(String username, int idPost, String comment) throws IOException {
+    public ObjectNode commentPost(String username, int idPost, String comment) throws IllegalArgumentException{
 
-        WSUser user = checkUser(username);
+        ObjectNode response = mapper.createObjectNode();
 
-        generator.writeStartObject();
+        WSUser user = checkUser(username,response);
 
-        if(user != null && checkStatus(user) == 0) {
 
-            Post post = checkPost(idPost);
+        if(user != null && checkStatus(user,response) == 0) {
+
+            Post post = checkPost(idPost,response);
 
             if(post != null) {
                 post.lockWrite();
-                if(!checkDeleted(post) && !checkAuthor(username,post) && checkFeed(user,post)) {
+                if(!checkDeleted(post,response) && !checkAuthor(username,post,response) && checkFeed(user,post,response)) {
                     post.newComment(username, comment);
 
                     // memorizzo nuvo commento
@@ -1024,30 +1021,29 @@ public class WSServer {
 
                     newComments.get(idPost).add(username); // a differenza dei voti possono esserci duplicati
 
-                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_CREATED);
+                    response.put("status-code", HttpURLConnection.HTTP_CREATED);
                 }
-                post.lockWrite();
+                post.unlockWrite();
             }
 
         }
 
-        generator.writeEndObject();
-
-        return jsonResponseToString();
+        return response;
 
 
     }
 
 
-    public String showPost(String username, int idPost) throws IOException {
+    public ObjectNode showPost(String username, int idPost) throws IllegalArgumentException{
 
-        WSUser user = checkUser(username);
+        ObjectNode response = mapper.createObjectNode();
 
-        generator.writeStartObject();
+        WSUser user = checkUser(username,response);
 
-        if(user != null && checkStatus(user) == 0) {
 
-            Post post = checkPost(idPost);
+        if(user != null && checkStatus(user,response) == 0) {
+
+            Post post = checkPost(idPost,response);
 
             if(post != null) {
 
@@ -1058,78 +1054,76 @@ public class WSServer {
                     or il post e' nel blog di user (quindi anche rewinned)
                     or il post e' nel feed di user
                  */
-                if(!checkDeleted(post) && post.getAuthor().equals(username) || user.getBlog().contains(idPost) || checkFeed(user,post)) {
-                    generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
-                    generator.writeStringField("title",post.getTitle());
-                    generator.writeStringField("content",post.getContent());
-                    generator.writeNumberField("upvote",post.getUpvote().size());
-                    generator.writeNumberField("downvote",post.getDownvote().size());
+                if(!checkDeleted(post,response) && post.getAuthor().equals(username) || user.getBlog().contains(idPost) || checkFeed(user,post,response)) {
+                    response.put("status-code", HttpURLConnection.HTTP_OK);
+                    response.put("title",post.getTitle());
+                    response.put("content",post.getContent());
+                    response.put("upvote",post.getUpvote().size());
+                    response.put("downvote",post.getDownvote().size());
 
-                    generator.writeArrayFieldStart("comments");
+                    ArrayNode cArray = mapper.createArrayNode();
                     for(Map.Entry<String,ArrayList<String>> c : post.getComments().entrySet()) {
                         for(String cont : c.getValue()) {
-                            generator.writeStartObject();
-                            generator.writeStringField("comment-author",c.getKey());
-                            generator.writeStringField("comment-content",cont);
-                            generator.writeEndObject();
+                            ObjectNode cObject = mapper.createObjectNode();
+                            cObject.put("comment-author",c.getKey());
+                            cObject.put("comment-content",cont);
+                            cArray.add(cObject);
                         }
                     }
-                    generator.writeEndArray();
+                    response.set("comments",cArray);
                 }
                 post.unlockRead();
             }
         }
 
-        generator.writeEndObject();
 
-        return jsonResponseToString();
+        return response;
 
     }
 
 
-    public String getWallet(String username) throws IOException {
-        WSUser user = checkUser(username);
+    public ObjectNode getWallet(String username) throws IllegalArgumentException{
 
-        generator.writeStartObject();
+        ObjectNode response = mapper.createObjectNode();
+        WSUser user = checkUser(username,response);
 
-        if(user != null && checkStatus(user) == 0) {
+        if(user != null && checkStatus(user,response) == 0) {
 
             user.lockRead();
 
-            generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
-
-            generator.writeNumberField("wallet",user.getWallet());
+            response.put("status-code", HttpURLConnection.HTTP_OK);
+            response.put("wallet",user.getWallet());
 
             ArrayList<Transaction> transactions = user.getTransactions();
 
             if(!transactions.isEmpty()) {
-                generator.writeArrayFieldStart("transactions");
+                ArrayNode tArray = mapper.createArrayNode();
 
                 for (Transaction t : transactions) {
-                    generator.writeStartObject();
-                    generator.writeNumberField("id", t.getId());
-                    generator.writeStringField("timestamp", t.getTimestamp());
-                    generator.writeNumberField("value", t.getValue());
-                    generator.writeEndObject();
+                    ObjectNode tObject = mapper.createObjectNode();
+                    tObject.put("id", t.getId());
+                    tObject.put("timestamp", t.getTimestamp());
+                    tObject.put("value", t.getValue());
                 }
 
-                generator.writeEndArray();
+                response.set("transactions",tArray);
+
             }
             user.unlockRead();
 
         }
 
-        generator.writeEndObject();
 
-        return jsonResponseToString();
+        return response;
     }
 
-    public String getWalletInBitcoin(String username) throws IOException {
-        WSUser user = checkUser(username);
+    public ObjectNode getWalletInBitcoin(String username) throws IllegalArgumentException{
 
-        generator.writeStartObject();
+        ObjectNode response = mapper.createObjectNode();
 
-        if(user != null && checkStatus(user) == 0) {
+        WSUser user = checkUser(username,response);
+
+        if(user != null && checkStatus(user,response) == 0) {
             user.lockRead();
             double wincoinWallet =  user.getWallet();
             user.unlockRead();
@@ -1137,17 +1131,14 @@ public class WSServer {
             double walletBtc =  1.638344810037658 * getExchangeRate();
 //            double walletBtc =  wincoinWallet * getExchangeRate(); todo remove comment
 
-            generator.writeNumberField("status-code", HttpURLConnection.HTTP_OK);
+            response.put("status-code", HttpURLConnection.HTTP_OK);
 
-            generator.writeNumberField("wallet-btc",walletBtc);
-
-
+            response.put("wallet-btc",walletBtc);
 
         }
 
-        generator.writeEndObject();
 
-        return jsonResponseToString();
+        return response;
     }
 
 
@@ -1188,7 +1179,7 @@ public class WSServer {
      * @return true se il post appartiene al feed dell'utente,
      *          false altrimenti
      */
-    private boolean checkFeed(WSUser user, Post post) throws IOException {
+    private boolean checkFeed(WSUser user, Post post,ObjectNode response) {
 
         /**
          * verifico se l'utente segue l'autore del post
@@ -1198,8 +1189,8 @@ public class WSServer {
 
         if((user.getFollowed().contains(post.getAuthor()) ||
         !Collections.disjoint(post.getRewiners(),user.getFollowed())) == false) {
-            generator.writeNumberField("status-code",HttpURLConnection.HTTP_FORBIDDEN);
-            generator.writeStringField("message", "post non presente nel tuo feed");
+            response.put("status-code",HttpURLConnection.HTTP_FORBIDDEN);
+            response.put("message", "post non presente nel tuo feed");
             return false;
         }
 
@@ -1213,10 +1204,10 @@ public class WSServer {
      * @return true se il post e' di @username, false altrimenti
      * @throws IOException
      */
-    private boolean checkAuthor(String username,Post post) throws IOException {
+    private boolean checkAuthor(String username,Post post,ObjectNode response) {
         if(post.getAuthor().equals(username)){
-            generator.writeNumberField("status-code",HttpURLConnection.HTTP_FORBIDDEN);
-            generator.writeStringField("message", "non puoi commentare/votare/rewinnare i tuoi post");
+            response.put("status-code",HttpURLConnection.HTTP_FORBIDDEN);
+            response.put("message", "non puoi commentare/votare/rewinnare i tuoi post");
             return true;
         }
 
@@ -1224,10 +1215,10 @@ public class WSServer {
 
     }
 
-    private boolean alreadyVoted(String username, Post post) throws IOException {
+    private boolean alreadyVoted(String username, Post post,ObjectNode response) {
         if(post.voted(username) == true) {
-            generator.writeNumberField("status-code",HttpURLConnection.HTTP_FORBIDDEN);
-            generator.writeStringField("message", "hai gia' votato il post "+post.getId());
+            response.put("status-code",HttpURLConnection.HTTP_FORBIDDEN);
+            response.put("message", "hai gia' votato il post "+post.getId());
             return true;
         }
 
@@ -1256,7 +1247,7 @@ public class WSServer {
     }
 
 
-    private WSUser checkUser(String username) throws IOException {
+    private WSUser checkUser(String username,ObjectNode response) throws IllegalArgumentException{
 
         if(username == null)
             throw new IllegalArgumentException();
@@ -1264,8 +1255,8 @@ public class WSServer {
         WSUser user = registeredUser.get(username);
 
         if(user == null) {
-            generator.writeNumberField("status-code",HttpURLConnection.HTTP_UNAUTHORIZED);
-            generator.writeStringField("message", "nessun utente registrato come "+username);
+            response.put("status-code",HttpURLConnection.HTTP_UNAUTHORIZED);
+            response.put("message", "nessun utente registrato come "+username);
             return null;
         }
 
@@ -1273,17 +1264,18 @@ public class WSServer {
 
     }
 
-    private int checkStatus(WSUser user) throws IOException {
+
+    private int checkStatus(WSUser user,ObjectNode response) {
         if(user.alreadyLogged())
             return 0;
 
-        generator.writeNumberField("status-code",HttpURLConnection.HTTP_UNAUTHORIZED);
-        generator.writeStringField("message", "azione non permessa, login non effettuato");
+        response.put("status-code",HttpURLConnection.HTTP_UNAUTHORIZED);
+        response.put("message", "azione non permessa, login non effettuato");
         return -1;
     }
 
 
-    private Post checkPost(int id) throws IOException {
+    private Post checkPost(int id,ObjectNode response) throws IllegalArgumentException{
 
         if(id < 0)
             throw new IllegalArgumentException();
@@ -1291,8 +1283,8 @@ public class WSServer {
         Post post = posts.get(id);
 
         if(post == null) {
-            generator.writeNumberField("status-code",HttpURLConnection.HTTP_NOT_FOUND);
-            generator.writeStringField("message", "post "+id+" non trovato");
+            response.put("status-code",HttpURLConnection.HTTP_NOT_FOUND);
+            response.put("message", "post "+id+" non trovato");
             return null;
         }
 
@@ -1301,21 +1293,60 @@ public class WSServer {
     }
 
 
-    private boolean checkDeleted(Post p) throws IOException {
+    private boolean checkDeleted(Post p,ObjectNode response) {
         if(p.isDeleted()){
-            generator.writeNumberField("status-code",HttpURLConnection.HTTP_NOT_FOUND);
-            generator.writeStringField("message", "post "+p.getId()+" non trovato");
+            response.put("status-code",HttpURLConnection.HTTP_NOT_FOUND);
+            response.put("message", "post "+p.getId()+" non trovato");
         }
 
         return false;
     }
 
-    private String jsonResponseToString() throws IOException {
+//    private String jsonResponseToString() throws IOException {
+//
+//        generator.flush();
+//        String response = responseStream.toString().trim();
+//        responseStream.reset();
+//        return response;
+//    }
 
-        generator.flush();
-        String response = responseStream.toString().trim();
-        responseStream.reset();
-        return response;
+    public void checkFiles() throws IOException{
+
+        if (!backupDir.exists())
+            backupDir.mkdir();
+
+        if (!usersBackup.exists())
+            usersBackup.createNewFile();
+
+        if (!postsBackup.exists())
+            postsBackup.createNewFile();
+
+        if (!tagsBackup.exists())
+            tagsBackup.createNewFile();
+
+        if (!variablesBackup.exists())
+            variablesBackup.createNewFile();
+
+
+    }
+
+    public void performBackup() throws IOException {
+
+        mapper.writeValue(usersBackup,registeredUser);
+        mapper.writeValue(postsBackup,posts);
+        mapper.writeValue(tagsBackup,allTags);
+
+        ObjectNode variables = mapper.createObjectNode();
+
+        variables.put("idpostcounter",idPostCounter);
+        variables.put("rewardsiteration",rewardsIteration);
+        variables.put("idtransactionscounter",idTransactionsCounter);
+        variables.put("lastexchangerate",lastExchangeRate).asDouble();
+
+
+        mapper.writeValue(variablesBackup,variables);
+
+
     }
 
 
@@ -1329,7 +1360,7 @@ public class WSServer {
         registeredUser.put("u6", new WSUser("u6", "", null));
 
         // Add some relationships between users
-        try {
+
             login("u1", "", 1);
             login("u2", "", 2);
             login("u3", "", 3);
@@ -1369,11 +1400,10 @@ public class WSServer {
 //            commentPost("u6", 0, "commento1");
 //            commentPost("u6", 0, "commento2");
 
-        } catch (IOException e) {
-            e.printStackTrace();
 
 
-        }
+
+
     }
 
 

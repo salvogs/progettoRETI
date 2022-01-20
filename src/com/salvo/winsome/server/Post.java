@@ -1,5 +1,6 @@
 package com.salvo.winsome.server;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -14,21 +15,17 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * @author Salvatore Guastella
  */
 @NoArgsConstructor
-public class Post {
-    @Getter @Setter private int id;
-    @Getter @Setter private String author;
-    @Getter @Setter private String title;
-    @Getter @Setter private String content;
-    @Getter @Setter private HashSet<String> upvote;
-    @Getter @Setter private HashSet<String> downvote;
-    @Getter @Setter private HashMap<String, ArrayList<String>> comments;
+public @Getter @Setter class Post {
+    private int id;
+    private String author;
+    private String title;
+    private String content;
+    private HashSet<String> upvote;
+    private HashSet<String> downvote;
+    private HashMap<String, ArrayList<String>> comments;
 
-    @Getter @Setter private int n_iterations = 0;
+    private int n_iterations;
 
-    private ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
-
-    private Lock readLock = readWriteLock.readLock();
-    private Lock writeLock = readWriteLock.writeLock();
 
 
     /**
@@ -37,8 +34,12 @@ public class Post {
      */
     private HashSet<String> rewiners;
 
+    @JsonIgnore private ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 
-    private boolean deleted;
+    @JsonIgnore private Lock readLock = readWriteLock.readLock();
+    @JsonIgnore private Lock writeLock = readWriteLock.writeLock();
+
+    @JsonIgnore private boolean deleted;
 
     public Post(int id, String author, String title, String content,int n_iterations) {
         this.id = id;
@@ -73,33 +74,6 @@ public class Post {
         comments.get(username).add(comment);
     }
 
-    public int getId() {
-        return id;
-    }
-
-    public String getAuthor() {
-        return author;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public String getContent() {
-        return content;
-    }
-
-    public HashSet<String> getUpvote() {
-        return upvote;
-    }
-
-    public HashSet<String> getDownvote() {
-        return downvote;
-    }
-
-    public HashMap<String, ArrayList<String>> getComments() {
-        return comments;
-    }
 
     public void addRewiner(String username) {
         rewiners.add(username);
