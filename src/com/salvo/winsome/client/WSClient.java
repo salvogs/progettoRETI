@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.salvo.winsome.RMIClientInterface;
 import com.salvo.winsome.RMIServerInterface;
 
@@ -12,7 +14,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.MulticastSocket;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.rmi.NotBoundException;
@@ -42,12 +46,15 @@ public class WSClient {
 
     private SocketChannel socket;
 
-    ByteArrayOutputStream requestStream;
-    JsonGenerator generator;
+    private InetAddress multicastAddress;
+    private int multicastPort;
 
-    JsonFactory jfactory;
-    JsonParser parser;
+
     ObjectMapper mapper;
+
+    MulticastListener mcastListener;
+    Thread mcastListenerThread;
+
 
     public WSClient(String serverAddress,int tcpPort, String registryAddr, int registryPort, String serviceName) {
 
@@ -89,12 +96,8 @@ public class WSClient {
 
             System.out.println("Connessione stabilita con "+serverAddress+':'+tcpPort);
 
-
-            requestStream = new ByteArrayOutputStream();
-            this.jfactory = new JsonFactory();
-            this.generator = jfactory.createGenerator(requestStream, JsonEncoding.UTF8);
-            this.generator.useDefaultPrettyPrinter();
             this.mapper = new ObjectMapper();
+            this.mapper.enable(SerializationFeature.INDENT_OUTPUT);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -130,19 +133,14 @@ public class WSClient {
         }
 
         try {
+            ObjectNode req = mapper.createObjectNode();
+            req.put("request-type", "login");
+            req.put("username", username);
+            req.put("password", password);
+            
 
-            generator.writeStartObject();
-            generator.writeStringField("request-type", "login");
-            generator.writeStringField("username", username);
-            generator.writeStringField("password", password);
-            generator.writeEndObject();
-            generator.flush();
-            byte[] request = requestStream.toByteArray();
-            System.out.println(requestStream.toString());
-            writeRequest(request, request.length);
-
-            requestStream.reset();
-
+            writeRequest(mapper.writeValueAsString(req));
+ 
             // leggo risposta del server
 
             String response = getResponse();
@@ -155,6 +153,16 @@ public class WSClient {
 
 
             if (statusCode == HttpURLConnection.HTTP_OK) {
+
+
+
+                mcastListener = new MulticastListener(
+                        res.get("multicast-address").asText(),res.get("multicast-port").asInt());
+
+                // avvio il thread in ascolto di notifiche sul MulticastSocket
+
+                mcastListenerThread = new Thread(mcastListener);
+                mcastListenerThread.start();
 
                 // leggo eventuale lista followers
 
@@ -171,7 +179,7 @@ public class WSClient {
 
                     // mi registro per ricevere notifiche
 
-                    if(remoteServer.registerForCallback(stub) == -1) {
+                    if(remoteServer.registerForCallback(stub) == -1) {  // todo notify on
                         System.err.println("registerForCallback fallita");
                         System.exit(-1);
                     }
@@ -188,6 +196,7 @@ public class WSClient {
 
         } catch (IOException e) {
             e.printStackTrace();// todo bad response
+            System.exit(-1);
         }
 
 
@@ -201,15 +210,13 @@ public class WSClient {
         }
 
         try {
-            generator.writeStartObject();
-            generator.writeStringField("request-type","logout");
-            generator.writeStringField("username",loginUsername);
-            generator.writeEndObject();
-            generator.flush();
-            byte[] request = requestStream.toByteArray();
-            requestStream.reset();
-            System.out.println(requestStream.toString());
-            writeRequest(request,request.length);
+            
+            ObjectNode req = mapper.createObjectNode();
+            req.put("request-type","logout");
+            req.put("username",loginUsername);
+            
+            
+            writeRequest(mapper.writeValueAsString(req));
 
             String response = getResponse();
 
@@ -220,6 +227,14 @@ public class WSClient {
             if(statusCode == HttpURLConnection.HTTP_OK) {
                 loginUsername = null;
                 followers.clear();
+
+                mcastListener.stop();
+                try {
+                    mcastListenerThread.join();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
                 System.out.println("logout effettuato con successo");
             } else
                 System.out.println(res.get("message").asText());
@@ -240,15 +255,12 @@ public class WSClient {
 
         try {
 
-            generator.writeStartObject();
-            generator.writeStringField("request-type","list-users");
-            generator.writeStringField("username",loginUsername);
-            generator.writeEndObject();
-            generator.flush();
-            byte[] request = requestStream.toByteArray();
-            requestStream.reset();
-            System.out.println(requestStream.toString());
-            writeRequest(request,request.length);
+            ObjectNode req = mapper.createObjectNode();
+            req.put("request-type","list-users");
+            req.put("username",loginUsername);
+            
+            
+            writeRequest(mapper.writeValueAsString(req));
 
 
             String response = getResponse();
@@ -293,15 +305,12 @@ public class WSClient {
         }
 
         try {
-            generator.writeStartObject();
-            generator.writeStringField("request-type","list-following");
-            generator.writeStringField("username",loginUsername);
-            generator.writeEndObject();
-            generator.flush();
-            byte[] request = requestStream.toByteArray();
-            requestStream.reset();
-            System.out.println(requestStream.toString());
-            writeRequest(request,request.length);
+            ObjectNode req = mapper.createObjectNode();
+            req.put("request-type","list-following");
+            req.put("username",loginUsername);
+            
+            
+            writeRequest(mapper.writeValueAsString(req));
 
 
             String response = getResponse();
@@ -334,16 +343,13 @@ public class WSClient {
 
             //            generator.setCodec(new ObjectMapper());
 
-            generator.writeStartObject();
-            generator.writeStringField("request-type","follow");
-            generator.writeStringField("username",loginUsername);
-            generator.writeStringField("to-follow",username);
-            generator.writeEndObject();
-            generator.flush();
-            byte[] request = requestStream.toByteArray();
-            requestStream.reset();
-            System.out.println(requestStream.toString());
-            writeRequest(request,request.length);
+            ObjectNode req = mapper.createObjectNode();
+            req.put("request-type","follow");
+            req.put("username",loginUsername);
+            req.put("to-follow",username);
+            
+            
+            writeRequest(mapper.writeValueAsString(req));
 
             String response = getResponse();
 
@@ -373,16 +379,13 @@ public class WSClient {
 
         try {
 
-            generator.writeStartObject();
-            generator.writeStringField("request-type","unfollow");
-            generator.writeStringField("username",loginUsername);
-            generator.writeStringField("to-unfollow",username);
-            generator.writeEndObject();
-            generator.flush();
-            byte[] request = requestStream.toByteArray();
-            requestStream.reset();
-            System.out.println(requestStream.toString());
-            writeRequest(request,request.length);
+            ObjectNode req = mapper.createObjectNode();
+            req.put("request-type","unfollow");
+            req.put("username",loginUsername);
+            req.put("to-unfollow",username);
+            
+            
+            writeRequest(mapper.writeValueAsString(req));
 
             String response = getResponse();
 
@@ -435,17 +438,14 @@ public class WSClient {
 
         try {
 
-            generator.writeStartObject();
-            generator.writeStringField("request-type","create-post");
-            generator.writeStringField("username",loginUsername);
-            generator.writeStringField("title",title);
-            generator.writeStringField("content",content);
-            generator.writeEndObject();
-            generator.flush();
-            byte[] request = requestStream.toByteArray();
-            requestStream.reset();
-            System.out.println(requestStream.toString());
-            writeRequest(request,request.length);
+            ObjectNode req = mapper.createObjectNode();
+            req.put("request-type","create-post");
+            req.put("username",loginUsername);
+            req.put("title",title);
+            req.put("content",content);
+            
+            
+            writeRequest(mapper.writeValueAsString(req));
 
             String response = getResponse();
 
@@ -479,16 +479,13 @@ public class WSClient {
 
         try {
 
-            generator.writeStartObject();
-            generator.writeStringField("request-type", "delete-post");
-            generator.writeStringField("username", loginUsername);
-            generator.writeNumberField("id-post", idPost);
-            generator.writeEndObject();
-            generator.flush();
-            byte[] request = requestStream.toByteArray();
-            requestStream.reset();
-            System.out.println(requestStream.toString());
-            writeRequest(request, request.length);
+            ObjectNode req = mapper.createObjectNode();
+            req.put("request-type", "delete-post");
+            req.put("username", loginUsername);
+            req.put("id-post", idPost);
+            
+            
+            writeRequest(mapper.writeValueAsString(req));
 
             String response = getResponse();
 
@@ -537,16 +534,11 @@ public class WSClient {
 
         try {
 
-            generator.writeStartObject();
-            generator.writeStringField("request-type","show-feed");
-            generator.writeStringField("username",loginUsername);
-            generator.writeEndObject();
+            ObjectNode req = mapper.createObjectNode();
+            req.put("request-type","show-feed");
+            req.put("username",loginUsername);
 
-            generator.flush();
-            byte[] request = requestStream.toByteArray();
-            requestStream.reset();
-            System.out.println(requestStream.toString());
-            writeRequest(request,request.length);
+            writeRequest(mapper.writeValueAsString(req));
 
             String response = getResponse();
 
@@ -574,17 +566,12 @@ public class WSClient {
         }
 
         try {
+            ObjectNode req = mapper.createObjectNode();
+            req.put("request-type","view-blog");
+            req.put("username",loginUsername);
 
-            generator.writeStartObject();
-            generator.writeStringField("request-type","view-blog");
-            generator.writeStringField("username",loginUsername);
-            generator.writeEndObject();
 
-            generator.flush();
-            byte[] request = requestStream.toByteArray();
-            requestStream.reset();
-            System.out.println(requestStream.toString());
-            writeRequest(request,request.length);
+            writeRequest(mapper.writeValueAsString(req));
 
             String response = getResponse();
 
@@ -614,17 +601,12 @@ public class WSClient {
 
         try {
 
-            generator.writeStartObject();
-            generator.writeStringField("request-type", "rewin-post");
-            generator.writeStringField("username",loginUsername);
-            generator.writeNumberField("id-post", idPost);
-            generator.writeEndObject();
+            ObjectNode req = mapper.createObjectNode();
+            req.put("request-type", "rewin-post");
+            req.put("username",loginUsername);
+            req.put("id-post", idPost);
 
-            generator.flush();
-            byte[] request = requestStream.toByteArray();
-            requestStream.reset();
-            System.out.println(requestStream.toString());
-            writeRequest(request, request.length);
+            writeRequest(mapper.writeValueAsString(req));
 
             String response = getResponse();
 
@@ -656,18 +638,13 @@ public class WSClient {
 
         try {
 
-            generator.writeStartObject();
-            generator.writeStringField("request-type", "rate-post");
-            generator.writeStringField("username",loginUsername);
-            generator.writeNumberField("id-post", idPost);
-            generator.writeNumberField("vote", Integer.parseInt(vote));
-            generator.writeEndObject();
+            ObjectNode req = mapper.createObjectNode();
+            req.put("request-type", "rate-post");
+            req.put("username",loginUsername);
+            req.put("id-post", idPost);
+            req.put("vote", Integer.parseInt(vote));
 
-            generator.flush();
-            byte[] request = requestStream.toByteArray();
-            requestStream.reset();
-            System.out.println(requestStream.toString());
-            writeRequest(request, request.length);
+            writeRequest(mapper.writeValueAsString(req));
 
             String response = getResponse();
 
@@ -707,18 +684,13 @@ public class WSClient {
 
         try {
 
-            generator.writeStartObject();
-            generator.writeStringField("request-type", "comment-post");
-            generator.writeStringField("username",loginUsername);
-            generator.writeNumberField("id-post", idPost);
-            generator.writeStringField("comment",comment);
-            generator.writeEndObject();
-
-            generator.flush();
-            byte[] request = requestStream.toByteArray();
-            requestStream.reset();
-            System.out.println(requestStream.toString());
-            writeRequest(request, request.length);
+            ObjectNode req = mapper.createObjectNode();
+            req.put("request-type", "comment-post");
+            req.put("username",loginUsername);
+            req.put("id-post", idPost);
+            req.put("comment",comment);
+            
+            writeRequest(mapper.writeValueAsString(req));
 
             String response = getResponse();
 
@@ -746,17 +718,12 @@ public class WSClient {
 
         try {
 
-            generator.writeStartObject();
-            generator.writeStringField("request-type", "show-post");
-            generator.writeStringField("username",loginUsername);
-            generator.writeNumberField("id-post", idPost);
-            generator.writeEndObject();
+            ObjectNode req = mapper.createObjectNode();
+            req.put("request-type", "show-post");
+            req.put("username",loginUsername);
+            req.put("id-post", idPost);
 
-            generator.flush();
-            byte[] request = requestStream.toByteArray();
-            requestStream.reset();
-            System.out.println(requestStream.toString());
-            writeRequest(request, request.length);
+            writeRequest(mapper.writeValueAsString(req));
 
             String response = getResponse();
 
@@ -782,16 +749,12 @@ public class WSClient {
 
         try {
 
-            generator.writeStartObject();
-            generator.writeStringField("request-type", "wallet");
-            generator.writeStringField("username",loginUsername);
-            generator.writeEndObject();
-            generator.flush();
+            ObjectNode req = mapper.createObjectNode();
+            req.put("request-type", "wallet");
+            req.put("username",loginUsername);
+            
 
-            byte[] request = requestStream.toByteArray();
-            requestStream.reset();
-            System.out.println(requestStream.toString());
-            writeRequest(request, request.length);
+            writeRequest(mapper.writeValueAsString(req));
 
             String response = getResponse();
 
@@ -817,16 +780,12 @@ public class WSClient {
 
         try {
 
-            generator.writeStartObject();
-            generator.writeStringField("request-type", "wallet-btc");
-            generator.writeStringField("username",loginUsername);
-            generator.writeEndObject();
-            generator.flush();
+            ObjectNode req = mapper.createObjectNode();
+            req.put("request-type", "wallet-btc");
+            req.put("username",loginUsername);
 
-            byte[] request = requestStream.toByteArray();
-            requestStream.reset();
-            System.out.println(requestStream.toString());
-            writeRequest(request, request.length);
+
+            writeRequest(mapper.writeValueAsString(req));
 
             String response = getResponse();
 
@@ -844,41 +803,28 @@ public class WSClient {
         }
     }
 
+    
+    private void writeRequest(String request) throws IllegalArgumentException, IOException{
 
-
-    private void writeRequest(byte[] request, int size) throws IllegalArgumentException, IOException{
-
-        if(request == null || size != request.length)
+        if(request == null)
             throw new IllegalArgumentException();
 
-        // todo scrivere tutto insieme
 
-        ByteBuffer length = ByteBuffer.allocate(Integer.BYTES);
-        length.putInt(size);
-        length.flip();
+        ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES+request.length());
+        buffer.putInt(request.length());
+        buffer.put(ByteBuffer.wrap(request.getBytes()));
 
-        // scrivo la prima parte del messaggio (dimensione messaggio) sul channel
-        while(length.hasRemaining())
-            socket.write(length);
+        buffer.flip();
 
-
-        ByteBuffer req = ByteBuffer.wrap(request);
-
-        // scrivo la seconda parte del messaggio (la richiesta vera e propria) sul channel
-
-        while(req.hasRemaining()){
-            socket.write(req);
-        }
-
-//        length.clear();
-
-
+        while(buffer.hasRemaining())
+            socket.write(buffer);
+        
 
     }
 
     private String getResponse() throws IOException {
-        ByteBuffer length = ByteBuffer.allocate(Integer.BYTES);
 
+        ByteBuffer length = ByteBuffer.allocate(Integer.BYTES);
 
         // leggo prima parte payload [length]
 
@@ -1086,7 +1032,10 @@ public class WSClient {
     }
 
 
-
+    public void stop() {
+        if(loginUsername != null) this.logout();
+        return;
+    }
 
 
 }

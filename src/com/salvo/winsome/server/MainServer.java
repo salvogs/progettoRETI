@@ -50,14 +50,8 @@ public class MainServer {
 
         WSServer server = new WSServer(tcpPort,udpPort,multicastPort,multicastAddress,regPort,regServiceName);
 
-        Thread rewardsThread = new Thread(new RewardsHandler(server));
 
-
-
-        rewardsThread.start();
         server.start();
-
-
 
 
 

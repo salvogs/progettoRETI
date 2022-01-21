@@ -34,7 +34,7 @@ public class RequestHandler implements Runnable{
     JsonFactory jfactory = new JsonFactory();
     JsonParser parser ;
     ByteArrayOutputStream responseStream;
-    JsonGenerator generator;
+
     ObjectMapper mapper;
 
     /**
@@ -50,14 +50,9 @@ public class RequestHandler implements Runnable{
         this.selector = selector;
         this.key = key;
 
-        this.parser = jfactory.createParser(request);
-//        parser.setCodec(new ObjectMapper())
-        responseStream = new ByteArrayOutputStream();
-        this.generator = jfactory.createGenerator(responseStream, JsonEncoding.UTF8);
-        this.generator.useDefaultPrettyPrinter();
         this.mapper = new ObjectMapper();
         this.mapper.enable(SerializationFeature.INDENT_OUTPUT);
-//        this.generator.setCodec(new ObjectMapper()); // per la serializzazione di oggetti
+
 
     }
 
@@ -321,24 +316,17 @@ public class RequestHandler implements Runnable{
         SocketChannel clientChannel = (SocketChannel) key.channel();
 
 
-        ByteBuffer length = ByteBuffer.allocate(Integer.BYTES);
-        length.putInt(response.length());
-        length.flip();
+        ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES+response.length());
+        buffer.putInt(response.length());
+        buffer.put(ByteBuffer.wrap(response.getBytes()));
 
-        // scrivo la prima parte del messaggio (dimensione messaggio) sul channel
-        while(length.hasRemaining())
-            clientChannel.write(length);
+        buffer.flip();
 
-
-        ByteBuffer req = ByteBuffer.wrap(response.getBytes());
-
-        // scrivo la seconda parte del messaggio (la richiesta vera e propria) sul channel
-
-        while(req.hasRemaining())
-            clientChannel.write(req);
+        while(buffer.hasRemaining())
+            clientChannel.write(buffer);
 
 
-        server.registerRead(selector, clientChannel);
+        server.registerRead(selector, clientChannel); // todo cambiare
 
     }
 

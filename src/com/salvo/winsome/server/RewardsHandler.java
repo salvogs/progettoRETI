@@ -1,5 +1,7 @@
 package com.salvo.winsome.server;
 
+import java.io.IOException;
+import java.net.*;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
@@ -13,20 +15,43 @@ public class RewardsHandler implements Runnable{
 
     private static final int TIMEOUT = 30;//tempo in secondi
 
-    private WSServer server;
+    WSServer server;
+    private final InetAddress multicastAddress;
+    private final int multicastPort;
+    private DatagramSocket dsocket;
+
+
     private ConcurrentHashMap<Integer,Post> posts;
+    HashMap<Integer, HashSet<String>> upvotes;
+    HashMap<Integer, HashSet<String>> downvotes;
+    HashMap<Integer, ArrayList<String>> comments;
+
     private double authorPercentage = 0.7; // todo config
 
 
-    private int globalIterations = 0;
+    private int globalIterations;
 
     public RewardsHandler(WSServer server) {
         this.server = server;
-        this.posts= server.getPosts();
+        this.posts = server.getPosts();
+
+        this.globalIterations = server.getRewardsIteration(); // da backup
+
+        this.multicastAddress = server.getMulticastAddress();
+        this.multicastPort = server.getMulticastPort();
+
+        try {
+            dsocket = new DatagramSocket();
+        } catch (SocketException e) {
+            e.printStackTrace();
+            System.exit(-1);
+        }
+
     }
 
     @Override
     public void run() {
+
 
         while (true) {
 
@@ -55,9 +80,9 @@ public class RewardsHandler implements Runnable{
            sulle quali calolare le ricompense
          */
 
-        HashMap<Integer, HashSet<String>> upvotes = server.getNewUpvotes();
-        HashMap<Integer, HashSet<String>> downvotes = server.getNewDownvotes();
-        HashMap<Integer, ArrayList<String>> comments = server.getNewComments();
+        this.upvotes = server.replaceAndGetNewUpvotes();
+        this.downvotes = server.replaceAndGetNewDownvotes();
+        this.comments = server.replaceAndGetNewComments();
 
 
         // insieme dei post modificati
@@ -69,9 +94,9 @@ public class RewardsHandler implements Runnable{
         postsToCompute.addAll(comments.keySet());
 
 
-        for(Integer idPost : postsToCompute) {
+        int postsComputed = 0;
 
-            //if(postexists) // todo o lo cancello dalle 3 map alla delete?
+        for(Integer idPost : postsToCompute) {
 
 
             int n_upvote = upvotes.containsKey(idPost) ? upvotes.get(idPost).size() : 0;
@@ -79,7 +104,12 @@ public class RewardsHandler implements Runnable{
             int n_comments = comments.containsKey(idPost) ? comments.get(idPost).size() : 0;
 
             Post p = posts.get(idPost);
+
+            if(p == null) continue; // controllo se il post è stato cancellato
+
+
             int n_iterations = p.getN_iterations();
+
 
 
             int newPeopleLikesSum = n_upvote - n_downvote;
@@ -129,7 +159,6 @@ public class RewardsHandler implements Runnable{
             server.incrementWallet(p.getAuthor(),sdf.format(new Date()),authorReward);
 
 
-
             HashSet<String> curators = new HashSet<>();
 
             if(n_upvote > 0) curators.addAll(upvotes.get(idPost));
@@ -143,14 +172,32 @@ public class RewardsHandler implements Runnable{
 
 
             postsToCompute.remove(idPost);
-
             upvotes.remove(idPost);
             downvotes.remove(idPost);
             comments.remove(idPost);
 
 
+            postsComputed++;
+
         }
 
+        if(postsComputed > 0) {
+            // invio notifica multicast ai client
+            // ricevuta solo dai client 'online' e con le notifiche attive
+
+            try {
+
+
+                final byte[] msg = "Calcolo ricompense effettuato".getBytes();
+                DatagramPacket dpacket = new DatagramPacket(msg,msg.length,multicastAddress,multicastPort);
+
+                dsocket.send(dpacket);
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+        }
 
 
 

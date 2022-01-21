@@ -41,22 +41,30 @@ public class MainClient {
 
         client = new WSClient(serverAddress,tcpPort,registryAddr,registryPort,regServiceName);
 
-        BufferedReader br = new BufferedReader(new InputStreamReader(System.in)); // TODO: cambiare con scanner?
-        String input = null;
 
-        while (true) {
+        System.out.println("\n" +
+                " _    _ _____ _   _  _____  ________  ___ _____ \n" +
+                "| |  | |_   _| \\ | |/  ___||  _  |  \\/  ||  ___|\n" +
+                "| |  | | | | |  \\| |\\ `--. | | | | .  . || |__  \n" +
+                "| |/\\| | | | | . ` | `--. \\| | | | |\\/| ||  __| \n" +
+                "\\  /\\  /_| |_| |\\  |/\\__/ /\\ \\_/ / |  | || |___ \n" +
+                " \\/  \\/ \\___/\\_| \\_/\\____/  \\___/\\_|  |_/\\____/ \n" +
+                "                                                \n" +
+                "                                                \n");
 
-            try {
-                input = br.readLine().trim();
-            } catch (IOException e) {
-                System.err.println(e.getMessage());
-                System.exit(-1);
+
+        try( BufferedReader br = new BufferedReader(new InputStreamReader(System.in))) {
+
+            while (true) {
+                String input = br.readLine().trim();
+                if (input.equals("")) continue;
+
+                if(decodeAndRunCommand(input.trim()) == -1) System.exit(0);
             }
 
-
-
-            decodeAndRunCommand(input.trim());
-
+        } catch (IOException e) {
+            System.err.println(e.getMessage());
+            System.exit(-1);
         }
 
     }
@@ -98,11 +106,16 @@ public class MainClient {
 
 
 
-    private static void decodeAndRunCommand(String input) {
+    private static int decodeAndRunCommand(String input) {
 
         // controllo prima se e' stata richiesta un' operazione senza parametri
 
         switch (input) {
+
+            case "exit" : {
+                client.stop();
+                return -1;
+            }
             case "logout" :
                 client.logout();
                 break;
@@ -250,22 +263,15 @@ public class MainClient {
                     }
                 } catch (NoSuchElementException | IllegalArgumentException e){
                     System.err.println("Input non valido, riprova");
-                    return;
+                    return 0;
                 }
-
-
-
-
-
-
-
 
             }
 
 
         }
 
-
+        return 0;
 
     }
 

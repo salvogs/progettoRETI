@@ -1,0 +1,41 @@
+{
+  "0" : {
+    "id" : 0,
+    "author" : "a",
+    "title" : "titolo",
+    "content" : "contenuto",
+    "upvote" : [ "b" ],
+    "downvote" : [ ],
+    "comments" : {
+      "b" : [ "sdkdjdfhj" ]
+    },
+    "n_iterations" : 0,
+    "rewiners" : [ ]
+  },
+  "1" : {
+    "id" : 1,
+    "author" : "a",
+    "title" : "dojfiji",
+    "content" : "dfdjfdifj",
+    "upvote" : [ ],
+    "downvote" : [ "b" ],
+    "comments" : {
+      "b" : [ "dfdkijidfjisdji" ]
+    },
+    "n_iterations" : 3,
+    "rewiners" : [ ]
+  },
+  "2" : {
+    "id" : 2,
+    "author" : "b",
+    "title" : "dfdjifjid",
+    "content" : "ejfikefjifi",
+    "upvote" : [ "a" ],
+    "downvote" : [ ],
+    "comments" : {
+      "a" : [ "fikfjidjigf", "fdfddsfsd", "dfjiofjkdifj" ]
+    },
+    "n_iterations" : 7,
+    "rewiners" : [ "a" ]
+  }
+}

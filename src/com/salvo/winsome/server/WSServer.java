@@ -40,9 +40,9 @@ public class WSServer {
 
 
     private final int tcpPort;
-    private final int udpPort;
-    private final InetAddress multicastAddress;
-    private final int multicastPort;
+//    private final int udpPort;
+    @Getter private final InetAddress multicastAddress;
+    @Getter private final int multicastPort;
     private final int regPort;
     private final String regServiceName;
 
@@ -73,14 +73,11 @@ public class WSServer {
 
     Object lock = new Object();
 
-    private ConcurrentHashMap<Integer, Post> posts;
+    @Getter private ConcurrentHashMap<Integer, Post> posts;
 
 
     ObjectMapper mapper;
 
-
-
-    // todo concurrent
 
     private HashMap<Integer, HashSet<String>> newUpvotes;
     private HashMap<Integer, HashSet<String>> newDownvotes;
@@ -102,11 +99,11 @@ public class WSServer {
     public WSServer(int tcpPort, int udpPort, int multicastPort, InetAddress multicastAddress, int regPort, String regServiceName) {
 
         this.tcpPort = tcpPort;
-        this.udpPort = udpPort;
 
 
         this.multicastAddress = multicastAddress;
         this.multicastPort = multicastPort;
+
         this.regPort = regPort;
         this.regServiceName = regServiceName;
 
@@ -188,31 +185,13 @@ public class WSServer {
     }
 
 
-
-
-
-
-    public HashMap<Integer, HashSet<String>> getNewUpvotes() {
-        return newUpvotes;
-    }
-
-    public HashMap<Integer, HashSet<String>> getNewDownvotes() {
-        return newDownvotes;
-    }
-
-    public HashMap<Integer, ArrayList<String>> getNewComments() {
-        return newComments;
-    }
-
-    public ConcurrentHashMap<Integer, Post> getPosts() {
-        return posts;
-    }
-
     public void incrementWallet(String username, String timestamp, double value) {
         WSUser user = registeredUser.get(username);
         if(user != null) {
+            user.lockWrite();
             user.incrementWallet(value);
             user.addTranstaction(new Transaction(idTransactionsCounter++,timestamp,value));
+            user.unlockWrite();
         }
     }
 
@@ -227,6 +206,13 @@ public class WSServer {
         // creo e avvio thread per la gestione del backup
         Thread backupThread = new Thread(new BackupHandler(this));
         backupThread.start();
+
+
+        // creo e avvio il thread per il calcolo delle ricompense
+
+        Thread rewardsThread = new Thread(new RewardsHandler(this));
+
+        rewardsThread.start();
 
 
         try {
@@ -426,6 +412,12 @@ public class WSServer {
                     hashUser.put(sessionId, username);
 
                     response.put("status-code", HttpURLConnection.HTTP_OK);
+
+
+                    // invio i riferimenti per mettersi in ascolto sulla multicast socket
+
+                    response.put("multicast-address",multicastAddress.getHostAddress());
+                    response.put("multicast-port",multicastPort);
 
                     // invio la lista dei follower
 
@@ -960,27 +952,24 @@ public class WSServer {
 
                 if(!checkDeleted(post,response) && !checkAuthor(username,post,response) && checkFeed(user,post,response) && !alreadyVoted(username,post,response)) {
 
-
                     if (vote == 1) {
                         post.newUpvote(username);
 
                         // memorizzo nuovo voto +
-
-                        if(!newUpvotes.containsKey(idPost))
-                            newUpvotes.put(idPost,new HashSet<>());
-
-                        newUpvotes.get(idPost).add(username); // aggiungo l'username al set dei votanti
+                        synchronized (newUpvotes) {
+                            newUpvotes.putIfAbsent(idPost, new HashSet<>());
+                            newUpvotes.get(idPost).add(username); // aggiungo l'username al set dei votanti
+                        }
 
                     }
                     else {
                         post.newDownvote(username);
 
                         // memorizzo nuovo voto -
-
-                        if(!newDownvotes.containsKey(idPost))
-                            newDownvotes.put(idPost,new HashSet<>());
-
-                        newDownvotes.get(idPost).add(username); // aggiungo l'username al set dei votanti
+                        synchronized (newDownvotes) {
+                            newDownvotes.putIfAbsent(idPost,new HashSet<>());
+                            newDownvotes.get(idPost).add(username); // aggiungo l'username al set dei votanti
+                        }
                     }
 
                     response.put("status-code", HttpURLConnection.HTTP_CREATED);
@@ -1016,10 +1005,11 @@ public class WSServer {
 
                     // memorizzo nuvo commento
 
-                    if(!newComments.containsKey(idPost))
-                        newComments.put(idPost,new ArrayList<>());
+                    synchronized (newComments) {
+                        newComments.putIfAbsent(idPost,new ArrayList<>());
+                        newComments.get(idPost).add(username); // a differenza dei voti possono esserci duplicati
+                    }
 
-                    newComments.get(idPost).add(username); // a differenza dei voti possono esserci duplicati
 
                     response.put("status-code", HttpURLConnection.HTTP_CREATED);
                 }
@@ -1104,6 +1094,7 @@ public class WSServer {
                     tObject.put("id", t.getId());
                     tObject.put("timestamp", t.getTimestamp());
                     tObject.put("value", t.getValue());
+                    tArray.add(tObject);
                 }
 
                 response.set("transactions",tArray);
@@ -1406,5 +1397,32 @@ public class WSServer {
 
     }
 
+    public int getRewardsIteration() {
+        return rewardsIteration;
+    }
 
+    public HashMap<Integer, HashSet<String>> replaceAndGetNewUpvotes() {
+        synchronized (newUpvotes) {
+            HashMap<Integer, HashSet<String>> tmpUpvotes = newUpvotes;
+            newUpvotes = new HashMap<>();
+            return tmpUpvotes;
+        }
+
+    }
+
+    public HashMap<Integer, HashSet<String>> replaceAndGetNewDownvotes() {
+        synchronized (newDownvotes) {
+            HashMap<Integer, HashSet<String>> tmpDownvotes = newDownvotes;
+            newDownvotes = new HashMap<>();
+            return tmpDownvotes;
+        }
+    }
+
+    public HashMap<Integer, ArrayList<String>> replaceAndGetNewComments() {
+        synchronized (newComments) {
+            HashMap<Integer, ArrayList<String>> tmpComments = newComments;
+            newComments = new HashMap<>();
+            return tmpComments;
+        }
+    }
 }

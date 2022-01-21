@@ -74,6 +74,10 @@ public @Getter @Setter class WSUser implements Serializable {
         this.wallet = 0;
 
         this.transactions = new ArrayList<>();
+
+        this.readWriteLock = new ReentrantReadWriteLock();
+        this.readLock = readWriteLock.readLock();
+        this.writeLock = readWriteLock.writeLock();
     }
 
 
