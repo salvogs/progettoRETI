@@ -325,8 +325,18 @@ public class RequestHandler implements Runnable{
         while(buffer.hasRemaining())
             clientChannel.write(buffer);
 
+        // creo il buffer che conterra' la lunghezza del messaggio
+        ByteBuffer length = ByteBuffer.allocate(Integer.BYTES);
+        // creo il buffer che conterra' il messaggio
+        ByteBuffer message = ByteBuffer.allocate(1024);
 
-        server.registerRead(selector, clientChannel); // todo cambiare
+        ByteBuffer[] bba = {length, message};
+        // imposto l'interestOps della key OP_READ
+        // e aggiungo l'array di bytebuffer (bba) come attachment
+        key.attach(bba);
+        key.interestOps(SelectionKey.OP_READ);
+        selector.wakeup();
+
 
     }
 

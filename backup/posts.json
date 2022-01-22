@@ -14,28 +14,15 @@
   },
   "1" : {
     "id" : 1,
-    "author" : "a",
-    "title" : "dojfiji",
-    "content" : "dfdjfdifj",
-    "upvote" : [ ],
-    "downvote" : [ "b" ],
-    "comments" : {
-      "b" : [ "dfdkijidfjisdji" ]
-    },
-    "n_iterations" : 3,
-    "rewiners" : [ ]
-  },
-  "2" : {
-    "id" : 2,
     "author" : "b",
-    "title" : "dfdjifjid",
-    "content" : "ejfikefjifi",
+    "title" : "sdfikjdifjid",
+    "content" : "ikfjdjfidkjgifigjif dkgjdk",
     "upvote" : [ "a" ],
     "downvote" : [ ],
     "comments" : {
-      "a" : [ "fikfjidjigf", "fdfddsfsd", "dfjiofjkdifj" ]
+      "a" : [ "dfodfkfdsfjk" ]
     },
-    "n_iterations" : 7,
-    "rewiners" : [ "a" ]
+    "n_iterations" : 1,
+    "rewiners" : [ ]
   }
 }

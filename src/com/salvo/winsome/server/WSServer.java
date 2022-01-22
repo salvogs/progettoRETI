@@ -224,7 +224,7 @@ public class WSServer {
             Registry r = LocateRegistry.createRegistry(regPort);
 
             // pubblicazione dello stub sul registry
-
+//            LocateRegistry.getRegistry(regPort).rebind(regServiceName, stub);
             r.rebind(regServiceName, stub);
 
 
@@ -260,46 +260,43 @@ public class WSServer {
 
                 int n = selector.select();
 
-                synchronized (lock) {
-
-                    if(n == 0)
-                        continue;
+                if(n == 0)
+                    continue;
 
 
-                    Set<SelectionKey> readyKeys = selector.selectedKeys();
-                    Iterator<SelectionKey> iterator = readyKeys.iterator();
+                Set<SelectionKey> readyKeys = selector.selectedKeys();
+                Iterator<SelectionKey> iterator = readyKeys.iterator();
 
-                    while (iterator.hasNext()) {
-                        SelectionKey key = iterator.next();
-                        iterator.remove(); // rimuove la chiave dal Selected Set, ma non dal registered Set
+                while (iterator.hasNext()) {
+                    SelectionKey key = iterator.next();
+                    iterator.remove(); // rimuove la chiave dal Selected Set, ma non dal registered Set
 
-                        try {
-                            if (key.isAcceptable()) { //nuova connessione di un client
+                    try {
+                        if (key.isAcceptable()) { //nuova connessione di un client
 
-                                ServerSocketChannel listenSocket = (ServerSocketChannel) key.channel();
-                                SocketChannel client = listenSocket.accept();
+                            ServerSocketChannel listenSocket = (ServerSocketChannel) key.channel();
+                            SocketChannel client = listenSocket.accept();
 
+                            System.out.println("Accettata nuova connessione dal client: " + client.getRemoteAddress());
 
+                            // registro il canale per operazioni di lettura
 
-                                System.out.println("Accettata nuova connessione dal client: " + client.getRemoteAddress());
-
-                                // registro il canale per operazioni di lettura
-
-                                registerRead(selector, client);
+                            registerRead(selector, client);
 
 
-                            } else if (key.isReadable()) {
-                                readMessage(selector, key);
-                            }
-
-                        } catch (IOException e) { // terminazione improvvisa del client
-                            key.cancel(); // tolgo la chiave dal selector
-                            disconnetionHandler((SocketChannel) key.channel());
+                        } else if (key.isReadable()) {
+                            readMessage(selector, key);
                         }
 
+                    } catch (IOException e) { // terminazione improvvisa del client
+                        key.cancel(); // tolgo la chiave dal selector
+                        e.printStackTrace();
+                        disconnetionHandler((SocketChannel) key.channel());
                     }
+
                 }
             }
+
         }catch (IOException e){
             e.printStackTrace();
         }
@@ -322,14 +319,11 @@ public class WSServer {
         // aggiungo il channel del client al selector con l'operazione OP_READ
         // e aggiungo l'array di bytebuffer (bba) come attachment
 
-
-
-        synchronized (lock) {
-            selector.wakeup();
-            clientChannel.register(selector, SelectionKey.OP_READ, bba);
-        }
+        clientChannel.register(selector, SelectionKey.OP_READ, bba);
 
     }
+
+
 
     private void readMessage(Selector selector, SelectionKey key) throws IOException {
 
@@ -341,7 +335,6 @@ public class WSServer {
 
 
         // leggo dal channel
-
 
 
         if (clientChannel.read(bba) == -1) {// controllo se il client ha chiuso la socket
@@ -364,16 +357,15 @@ public class WSServer {
 
                 bba[1].get(request);
 
-                /* cancello la registrazione del channel, ritorno in modalita' bloccante
-                    e faccio elaborare da un thread del pool la richiesta
+                /* non cancello la registrazione del channel ma non imposta alcuna
+                    operazione di interesse
+
+                    sarà il thread worker a impostare come interestOps la READ
+
                  */
+                key.interestOps(0);
 
-                key.cancel();
-                key.channel().configureBlocking(true);
                 pool.execute(new RequestHandler(this,new String(request).trim(),selector,key));
-
-
-
 
             }
 
@@ -1080,11 +1072,12 @@ public class WSServer {
         if(user != null && checkStatus(user,response) == 0) {
 
             user.lockRead();
+            ArrayList<Transaction> transactions = new ArrayList<>(user.getTransactions());
+            double wallet = user.getWallet();
+            user.unlockRead();
 
             response.put("status-code", HttpURLConnection.HTTP_OK);
             response.put("wallet",user.getWallet());
-
-            ArrayList<Transaction> transactions = user.getTransactions();
 
             if(!transactions.isEmpty()) {
                 ArrayNode tArray = mapper.createArrayNode();
@@ -1100,7 +1093,6 @@ public class WSServer {
                 response.set("transactions",tArray);
 
             }
-            user.unlockRead();
 
         }
 

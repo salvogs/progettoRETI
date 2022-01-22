@@ -87,7 +87,7 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
 
         user.setRemoteClient(client);
 
-        System.out.println("registrato "+client.getUsername());
+        System.out.println("registrata callback "+client.getUsername());
 
         return 0;
     }
