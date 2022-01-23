@@ -66,6 +66,7 @@ public class WSClient {
             int attempts = 0;
             do {
                 try {
+
                     // individuo il registry sulla porta args[0]
                     Registry r = LocateRegistry.getRegistry(registryAddr, registryPort);
 
@@ -76,7 +77,6 @@ public class WSClient {
 
                     // tcp connection
 
-
                     this.socket = SocketChannel.open(new InetSocketAddress(serverAddress, tcpPort));
 
                     break;
@@ -85,6 +85,7 @@ public class WSClient {
                     System.err.println("ERRORE: Impossibile connettersi con il server,riprovo tra 1000ms");
                     attempts++;
                     Thread.sleep(1000);
+
                 }
             }while(attempts < 10);
 

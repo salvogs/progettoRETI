@@ -297,7 +297,7 @@ public class RequestHandler implements Runnable{
 
         try {
 
-            sendResponse(badReq ? "{\n  \"status-code\" : 400,\n  \"message\" : \"bad request\"\n}"
+            registerForResponse(badReq ? "{\n  \"status-code\" : 400,\n  \"message\" : \"bad request\"\n}"
                     : mapper.writeValueAsString(response));
 
             System.out.println(mapper.writeValueAsString(response));
@@ -309,36 +309,51 @@ public class RequestHandler implements Runnable{
     }
 
 
-
-
-    private void sendResponse(String response) throws IOException {
-
-        SocketChannel clientChannel = (SocketChannel) key.channel();
-
-
+    /**
+     * cambia l'interest set della key in OP_WRITE in modo tale che
+     * il dispatcher mandi la risposta quando il channel e' pronto in scrittura
+     * @param response
+     */
+    public void registerForResponse(String response) {
         ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES+response.length());
         buffer.putInt(response.length());
         buffer.put(ByteBuffer.wrap(response.getBytes()));
-
         buffer.flip();
 
-        while(buffer.hasRemaining())
-            clientChannel.write(buffer);
-
-        // creo il buffer che conterra' la lunghezza del messaggio
-        ByteBuffer length = ByteBuffer.allocate(Integer.BYTES);
-        // creo il buffer che conterra' il messaggio
-        ByteBuffer message = ByteBuffer.allocate(1024);
-
-        ByteBuffer[] bba = {length, message};
-        // imposto l'interestOps della key OP_READ
-        // e aggiungo l'array di bytebuffer (bba) come attachment
-        key.attach(bba);
-        key.interestOps(SelectionKey.OP_READ);
+        key.attach(buffer);
+        key.interestOps(SelectionKey.OP_WRITE);
         selector.wakeup();
 
-
     }
+
+//    private void sendResponse(String response) throws IOException {
+//
+//        SocketChannel clientChannel = (SocketChannel) key.channel();
+//
+//
+//        ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES+response.length());
+//        buffer.putInt(response.length());
+//        buffer.put(ByteBuffer.wrap(response.getBytes()));
+//
+//        buffer.flip();
+//
+//        while(buffer.hasRemaining())
+//            clientChannel.write(buffer);
+//
+//        // creo il buffer che conterra' la lunghezza del messaggio
+//        ByteBuffer length = ByteBuffer.allocate(Integer.BYTES);
+//        // creo il buffer che conterra' il messaggio
+//        ByteBuffer message = ByteBuffer.allocate(1024);
+//
+//        ByteBuffer[] bba = {length, message};
+//        // imposto l'interestOps della key OP_READ
+//        // e aggiungo l'array di bytebuffer (bba) come attachment
+//        key.attach(bba);
+//        key.interestOps(SelectionKey.OP_READ);
+//        selector.wakeup();
+//
+//
+//    }
 
     private String parseNextTextField(JsonNode req, String fieldName) throws IOException{
         JsonNode field = req.get(fieldName);

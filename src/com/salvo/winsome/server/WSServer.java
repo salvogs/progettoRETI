@@ -239,8 +239,8 @@ public class WSServer {
         Selector selector = null; // per permettere il multiplexing dei canali
         try {
             serverChannel = ServerSocketChannel.open();
-            serverChannel.bind(new InetSocketAddress("localhost", tcpPort));
-
+            serverChannel.bind(new InetSocketAddress("localhost", tcpPort)); //todo togliere commento
+//            serverChannel.bind(new InetSocketAddress("192.168.8.127", tcpPort));
             //imposto il channel come non bloccante
             serverChannel.configureBlocking(false);
 
@@ -286,11 +286,13 @@ public class WSServer {
 
                         } else if (key.isReadable()) {
                             readMessage(selector, key);
+                        } else if(key.isWritable()) {
+                            sendResponse(selector,key);
                         }
 
                     } catch (IOException e) { // terminazione improvvisa del client
                         key.cancel(); // tolgo la chiave dal selector
-                        e.printStackTrace();
+//                        e.printStackTrace();
                         disconnetionHandler((SocketChannel) key.channel());
                     }
 
@@ -319,6 +321,8 @@ public class WSServer {
         // aggiungo il channel del client al selector con l'operazione OP_READ
         // e aggiungo l'array di bytebuffer (bba) come attachment
 
+
+        // se è già registrato in scrittura viene sostituito
         clientChannel.register(selector, SelectionKey.OP_READ, bba);
 
     }
@@ -375,6 +379,34 @@ public class WSServer {
 
     }
 
+    private void sendResponse(Selector selector, SelectionKey key) throws IOException {
+
+        SocketChannel clientChannel = (SocketChannel) key.channel();
+        ByteBuffer buffer = (ByteBuffer) key.attachment();
+
+        clientChannel.write(buffer);
+
+        if (!buffer.hasRemaining()) {
+            buffer.clear();
+            this.registerRead(selector, clientChannel);
+        }
+
+
+
+//        // creo il buffer che conterra' la lunghezza del messaggio
+//        ByteBuffer length = ByteBuffer.allocate(Integer.BYTES);
+//        // creo il buffer che conterra' il messaggio
+//        ByteBuffer message = ByteBuffer.allocate(1024);
+//
+//        ByteBuffer[] bba = {length, message};
+//        // imposto l'interestOps della key OP_READ
+//        // e aggiungo l'array di bytebuffer (bba) come attachment
+//        key.attach(bba);
+//        key.interestOps(SelectionKey.OP_READ);
+//        selector.wakeup();
+
+
+    }
 
 
     public ObjectNode login(String username, String password, int sessionId) throws IllegalArgumentException {
