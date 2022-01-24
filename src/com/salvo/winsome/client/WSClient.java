@@ -30,6 +30,8 @@ import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 
@@ -39,15 +41,13 @@ import java.util.regex.Pattern;
 public class WSClient {
 
     private String loginUsername;
+    private volatile AtomicBoolean doNotDisturb; // false -> off true-> on
     private HashMap<String,String[]> followers;
     private RMIClient clientCallback;
 
     private RMIServerInterface remoteServer;
 
     private SocketChannel socket;
-
-    private InetAddress multicastAddress;
-    private int multicastPort;
 
 
     ObjectMapper mapper;
@@ -60,7 +60,7 @@ public class WSClient {
 
         this.loginUsername = null;
         this.followers = new HashMap<>();
-
+        this.doNotDisturb = new AtomicBoolean();
 
         try {
             int attempts = 0;
@@ -158,7 +158,7 @@ public class WSClient {
 
 
                 mcastListener = new MulticastListener(
-                        res.get("multicast-address").asText(),res.get("multicast-port").asInt());
+                        res.get("multicast-address").asText(),res.get("multicast-port").asInt(),doNotDisturb);
 
                 // avvio il thread in ascolto di notifiche sul MulticastSocket
 
@@ -171,7 +171,7 @@ public class WSClient {
 
                 loginUsername = username;
 
-                this.clientCallback = new RMIClient(followers,loginUsername);
+                this.clientCallback = new RMIClient(followers,doNotDisturb);
 
                 // esporto stub clientCallback per permettere al server di notificare nuovi follow/unfollow
 
@@ -180,13 +180,14 @@ public class WSClient {
 
                     // mi registro per ricevere notifiche
 
-                    if(remoteServer.registerForCallback(stub) == -1) {  // todo notify on
+                    if(remoteServer.registerForCallback(stub,loginUsername) == -1) {
                         System.err.println("registerForCallback fallita");
                         System.exit(-1);
                     }
 
                 } catch (RemoteException e) {
                     e.printStackTrace();
+                    System.exit(-1);
                 }
 
                 System.out.println("login effettuato con successo");
@@ -804,6 +805,26 @@ public class WSClient {
         }
     }
 
+
+    public void enableDoNotDisturb() {
+        if(loginUsername == null){
+            System.err.println("Effettua prima il login");
+            return;
+        }
+        doNotDisturb.set(true);
+
+        System.out.println("Notifiche disabilitate");
+    }
+
+    public void disableDoNotDisturb() {
+        if(loginUsername == null){
+            System.err.println("Effettua prima il login");
+            return;
+        }
+        doNotDisturb.set(false);
+
+        System.out.println("Notifiche abilitate");
+    }
     
     private void writeRequest(String request) throws IllegalArgumentException, IOException{
 

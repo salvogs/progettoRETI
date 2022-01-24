@@ -14,6 +14,4 @@ public interface RMIClientInterface extends Remote {
 
     void newUnfollow(String user) throws RemoteException;
 
-    String getUsername() throws RemoteException;
-
 }

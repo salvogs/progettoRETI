@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class RewardsHandler implements Runnable{
 
-    private static final int TIMEOUT = 30;//tempo in secondi
+    private static final int TIMEOUT = 30;//tempo in secondi todo parse
 
     WSServer server;
     private final InetAddress multicastAddress;
@@ -35,7 +35,7 @@ public class RewardsHandler implements Runnable{
         this.server = server;
         this.posts = server.getPosts();
 
-        this.globalIterations = server.getRewardsIteration(); // da backup
+        this.globalIterations = server.getRewardsIteration();
 
         this.multicastAddress = server.getMulticastAddress();
         this.multicastPort = server.getMulticastPort();
@@ -53,22 +53,28 @@ public class RewardsHandler implements Runnable{
     public void run() {
 
 
-        while (true) {
+        while (!Thread.currentThread().isInterrupted()) {
 
-            server.setRewardsIteration(globalIterations);
-//            try {
-//                Thread.sleep(TIMEOUT*1000);
-            Scanner s = new Scanner(System.in);
+            try {
+                Thread.sleep(TIMEOUT*1000);
+                computeRewards();
 
-            System.out.println(s.nextLine());
-                System.out.println("SCATTATO TIMERRRRR");
-                globalIterations++;
-//                server.go();
-//            } catch (InterruptedException e) {
-//                e.printStackTrace();
-//            }
-            computeRewards();
+            } catch (InterruptedException e) {
+                break;
+            }
+
+
+//            Scanner s = new Scanner(System.in);
+//
+//            System.out.println(s.nextLine());
+//            System.out.println("SCATTATO TIMERRRRR");
         }
+
+        // calcolo le ricompense per l'ultima volta
+        computeRewards();
+        dsocket.close();
+        return;
+
 
 
 
@@ -76,10 +82,12 @@ public class RewardsHandler implements Runnable{
 
     private void computeRewards() {
 
+        globalIterations++;
+        server.setRewardsIteration(globalIterations);
+
         /* recupero dal server le hashmap relative alle (nuove) interazioni
            sulle quali calolare le ricompense
          */
-
         this.upvotes = server.replaceAndGetNewUpvotes();
         this.downvotes = server.replaceAndGetNewDownvotes();
         this.comments = server.replaceAndGetNewComments();
@@ -151,7 +159,7 @@ public class RewardsHandler implements Runnable{
             reward = reward / (globalIterations - n_iterations);
 
 
-            System.out.println("rewarddd: "+reward);
+//            System.out.println("rewarddd: "+reward);
 
             SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
 
@@ -182,19 +190,23 @@ public class RewardsHandler implements Runnable{
         }
 
         if(postsComputed > 0) {
+
+            System.out.println("Calcolo ricompense effettuato");
+
             // invio notifica multicast ai client
             // ricevuta solo dai client 'online' e con le notifiche attive
 
             try {
 
-
                 final byte[] msg = "Calcolo ricompense effettuato".getBytes();
-                DatagramPacket dpacket = new DatagramPacket(msg,msg.length,multicastAddress,multicastPort);
+                DatagramPacket dpacket = new DatagramPacket(msg, msg.length, multicastAddress, multicastPort);
 
                 dsocket.send(dpacket);
 
+                System.out.println("Avviso multicast inviato");
             } catch (IOException e) {
-                e.printStackTrace();
+                System.err.println("Errore: impossibile inviare messaggio multicast");
+//                e.printStackTrace();
             }
 
         }
@@ -202,4 +214,7 @@ public class RewardsHandler implements Runnable{
 
 
     }
+
+
+
 }

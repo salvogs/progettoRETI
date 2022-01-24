@@ -2,20 +2,22 @@ package com.salvo.winsome.client;
 
 import java.io.IOException;
 import java.net.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * @author Salvatore Guastella
  */
 public class MulticastListener implements Runnable{
 
-    InetAddress multicastAddress;
-    int multicastPort;
-    MulticastSocket msocket;
+    private InetAddress multicastAddress;
+    private int multicastPort;
+    private MulticastSocket msocket;
+    private volatile AtomicBoolean doNotDisturb;
 
-
-    public MulticastListener(String multicastAddress, int multicastPort) throws UnknownHostException {
+    public MulticastListener(String multicastAddress, int multicastPort, AtomicBoolean doNotDisturb) throws UnknownHostException {
         this.multicastAddress = InetAddress.getByName(multicastAddress);
         this.multicastPort = multicastPort;
+        this.doNotDisturb = doNotDisturb;
     }
 
     @Override
@@ -33,7 +35,10 @@ public class MulticastListener implements Runnable{
 
             msocket.receive(msg); // aspetto che vengano calcolate le ricompense
 
-            System.out.println(new String(msg.getData()).trim());
+
+
+            if(doNotDisturb.get() == false) System.out.println(new String(msg.getData()).trim());
+
 
 
         } catch (SocketException e) {

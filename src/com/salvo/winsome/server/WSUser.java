@@ -89,11 +89,11 @@ public @Getter @Setter class WSUser implements Serializable {
 
     // notifica quando l'utente ha un nuovo follower
     public void notifyNewFollow(String user, String[] tags) throws RemoteException {
-        remoteClient.newFollow(user,tags);
+        if(remoteClient != null) remoteClient.newFollow(user,tags);
     }
 
     public void notifyNewUnfollow(String user) throws RemoteException {
-        remoteClient.newUnfollow(user);
+        if(remoteClient != null) remoteClient.newUnfollow(user);
     }
 
     public boolean alreadyLogged(){

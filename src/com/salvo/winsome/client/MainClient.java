@@ -15,6 +15,8 @@ import java.util.*;
 public class MainClient {
 
     private static WSClient client;
+    private static int eCounter = 0;
+
 
     public static void main(String[] args) {
 
@@ -55,6 +57,9 @@ public class MainClient {
 
         try( BufferedReader br = new BufferedReader(new InputStreamReader(System.in))) {
 
+
+            System.out.println("Benvenuto in winsome:");
+            System.out.println("Digita 'help' per visualizzare la lista dei comandi, quit per uscire");
             while (true) {
                 String input = br.readLine().trim();
                 if (input.equals("")) continue;
@@ -62,8 +67,7 @@ public class MainClient {
                 if(decodeAndRunCommand(input.trim()) == -1) System.exit(0);
             }
 
-        } catch (IOException e) {
-            System.err.println(e.getMessage());
+        } catch (Exception e) {
             System.exit(-1);
         }
 
@@ -111,11 +115,19 @@ public class MainClient {
         // controllo prima se e' stata richiesta un' operazione senza parametri
 
         switch (input) {
-
-            case "exit" : {
+            case "help":
+                help();
+                break;
+            case "quit" : {
                 client.stop();
                 return -1;
             }
+            case "dnd on" :
+                client.enableDoNotDisturb();
+                break;
+            case "dnd off" :
+                client.disableDoNotDisturb();
+                break;
             case "logout" :
                 client.logout();
                 break;
@@ -263,6 +275,11 @@ public class MainClient {
                     }
                 } catch (NoSuchElementException | IllegalArgumentException e){
                     System.err.println("Input non valido, riprova");
+                    eCounter++;
+                    if(eCounter == 3) {
+                        eCounter = 0;
+                        System.out.println("Digita il comando 'help' per visualizzare la lista dei comandi");
+                    }
                     return 0;
                 }
 
@@ -275,6 +292,31 @@ public class MainClient {
 
     }
 
+    private static void help() {
+        System.out.println("----------------- Sintassi comandi WINSOME client -----------------");
+        System.out.println("ATTENZIONE: tutti i comandi sono case sensitive");
+        System.out.println("dnd on -> per disabilitare la stampa delle notifiche");
+        System.out.println("dnd off -> per abilitare la stampa delle notifiche");
+        System.out.println("register <username> <password> -> per registrare un nuovo utente su winsome");
+        System.out.println("login <username> <password> -> per effettuare il login di uno specifico utente");
+        System.out.println("logout <username> -> per effettuare il logout di uno specifico utente");
+        System.out.println("list users -> per visualizzare gli utenti di winsome con almeno un tag in comune");
+        System.out.println("list following -> per visualizzare la lista degli utenti seguiti");
+        System.out.println("list followers -> per visualizzare la lista dei propri followers");
+        System.out.println("follow <username> -> per seguire un utente");
+        System.out.println("unfollow <username> -> per smettere di seguire un utente");
+        System.out.println("blog -> per visualizzare il proprio blog (post di cui l'utente e' autore)");
+        System.out.println("show feed -> per visualizzare il proprio feed (blog degli utenti seguiti)");
+        System.out.println("post <\"title\"> <\"content\"> -> per creare un nuovo post su winsome (\"\" obbligatorie)");
+        System.out.println("delete <idpost> -> per cancellare un post da winsome");
+        System.out.println("rewin <idpost> -> per effettuare il rewin di un post");
+        System.out.println("show post <idpost> -> per visualizzare i dettagli di un post");
+        System.out.println("rate <idpost> <vote> -> per esprimere un voto su un post (+1 positivo -1 negativo)");
+        System.out.println("comment <idpost> <\"commment\"> -> per aggiungere un commento ad un post (\"\" obbligatorie)");
+        System.out.println("wallet -> per recuperare il valore del proprio portafoglio e la lista delle transazioni");
+        System.out.println("wallet btc -> per recuperare il valore del proprio portafoglio convertito in bitcoin");
+        System.out.println("------------------------------------------------------------------\n");
+    }
 
 
 }

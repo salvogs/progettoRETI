@@ -319,10 +319,19 @@ public class RequestHandler implements Runnable{
         buffer.putInt(response.length());
         buffer.put(ByteBuffer.wrap(response.getBytes()));
         buffer.flip();
-
         key.attach(buffer);
-        key.interestOps(SelectionKey.OP_WRITE);
-        selector.wakeup();
+
+        if(selector.isOpen()) {
+            key.interestOps(SelectionKey.OP_WRITE);
+            selector.wakeup();
+        }
+
+        // altrimenti il worker potrebbe mandare la risposta
+//        else {
+//            while (buffer.hasRemaining())
+//                ((SocketChannel) key.channel()).write(buffer);
+//        }
+
 
     }
 

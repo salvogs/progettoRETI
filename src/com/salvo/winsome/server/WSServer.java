@@ -29,6 +29,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -36,7 +37,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 /**
  * @author Salvatore Guastella
  */
-public class WSServer {
+public class WSServer implements Runnable{
 
 
     private final int tcpPort;
@@ -95,6 +96,9 @@ public class WSServer {
     private File variablesBackup;
 
 
+    Selector selector = null; // per permettere il multiplexing dei channel
+    boolean exit = false;
+
 
     public WSServer(int tcpPort, int udpPort, int multicastPort, InetAddress multicastAddress, int regPort, String regServiceName) {
 
@@ -120,6 +124,8 @@ public class WSServer {
 
 
         if(restoreBackup() == -1) {
+            System.err.println("Impossibile ripristinare backup");
+            System.out.println("Inizializzazione server...");
             this.registeredUser = new ConcurrentHashMap<>();
             this.posts = new ConcurrentHashMap<>();
             this.allTags = new ConcurrentHashMap<>();
@@ -127,7 +133,7 @@ public class WSServer {
             this.rewardsIteration = 0;
             this.idTransactionsCounter = 0;
             this.lastExchangeRate = 0;
-        }
+        } else System.out.println("Backup ripristinato");
 
         this.remoteServer = new RMIServer(registeredUser,allTags,allTagsWriteLock);
         this.hashUser = new ConcurrentHashMap<>();
@@ -172,14 +178,12 @@ public class WSServer {
                 return 0;
 
             } catch (Exception e) {
-                System.err.println("Impossibile leggere backup");
                 e.printStackTrace();
                 return -1;
             }
 
         }
 
-        System.err.println("Impossibile leggere backup");
         return -1;
 
     }
@@ -200,7 +204,7 @@ public class WSServer {
     }
 
 
-    public void start() {
+    public void run() {
 
 
         // creo e avvio thread per la gestione del backup
@@ -211,7 +215,6 @@ public class WSServer {
         // creo e avvio il thread per il calcolo delle ricompense
 
         Thread rewardsThread = new Thread(new RewardsHandler(this));
-
         rewardsThread.start();
 
 
@@ -236,7 +239,7 @@ public class WSServer {
         // istanza di un ServerSocketChannel in ascolto di richieste di connessione
 
         ServerSocketChannel serverChannel;
-        Selector selector = null; // per permettere il multiplexing dei canali
+
         try {
             serverChannel = ServerSocketChannel.open();
             serverChannel.bind(new InetSocketAddress("localhost", tcpPort)); //todo togliere commento
@@ -254,10 +257,8 @@ public class WSServer {
 
             System.out.println("In attesa di connessioni sulla porta " + tcpPort);
 
-            while (true) {
-
+            while (!exit) {
                 // operazione bloccante che aspetta che ci sia un channel ready
-
                 int n = selector.select();
 
                 if(n == 0)
@@ -299,12 +300,34 @@ public class WSServer {
                 }
             }
 
-        }catch (IOException e){
+
+            // termino pool
+            selector.close();
+            pool.shutdown();
+            pool.awaitTermination(10, TimeUnit.SECONDS);
+            // interrompo thread delegato al calcolo delle ricompense
+            rewardsThread.interrupt();
+            rewardsThread.join();
+
+            // interrompo thread delegato al backup
+            backupThread.interrupt();
+            backupThread.join();
+
+
+            return;
+
+        }catch (Exception e){
             e.printStackTrace();
+            System.exit(-1);
         }
 
     }
 
+
+    public void stop() {
+        this.exit = true;
+        selector.wakeup();
+    }
 
 
     public void registerRead(Selector selector, SocketChannel clientChannel) throws IOException {
@@ -669,8 +692,7 @@ public class WSServer {
                         response.put("status-code",HttpURLConnection.HTTP_CREATED);
 
                         try {
-                            if (userToFollow.getSessionId() != -1)
-                                userToFollow.notifyNewFollow(username, user.getTags());
+                            userToFollow.notifyNewFollow(username, user.getTags());
                         } catch (RemoteException e) {
                             System.err.println("Impossibile notificare il client");
                             e.printStackTrace();
@@ -718,8 +740,7 @@ public class WSServer {
                         response.put("status-code", HttpURLConnection.HTTP_OK);
 
                         try {
-                            if (userToUnfollow.getSessionId() != -1)
-                                userToUnfollow.notifyNewUnfollow(username);
+                            userToUnfollow.notifyNewUnfollow(username);
                         } catch (RemoteException e) {
                             System.err.println("Impossibile notificare il client");
                             e.printStackTrace();

@@ -6,6 +6,7 @@ import com.salvo.winsome.Utils;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.HashMap;
+import java.util.Scanner;
 
 
 /**
@@ -26,7 +27,7 @@ public class MainServer {
 
         System.out.println(result);
 
-
+        System.out.println("Avvio server...");
 
         int tcpPort = getPortParameter(result,"tcpport");
         int udpPort = getPortParameter(result,"udpport");
@@ -49,14 +50,30 @@ public class MainServer {
 
 
         WSServer server = new WSServer(tcpPort,udpPort,multicastPort,multicastAddress,regPort,regServiceName);
+        Thread serverThread = new Thread(server);
+        serverThread.start();
 
-
-        server.start();
-
-
-
-
+        Scanner s = new Scanner(System.in);
+        while(true) {
+            System.out.println("Digita 'stop' per terminare l'esecuzione\n");
+            String in = s.nextLine();
+            if(in.equalsIgnoreCase("stop")) {
+                System.out.println("Terminazione server...");
+                server.stop();
+                try {
+                    serverThread.join();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                System.out.println("Server terminato");
+                System.exit(0);
+            }
         }
+
+
+
+    }
+
 
     private static int getPortParameter(HashMap<String,String> result, String portName) {
 

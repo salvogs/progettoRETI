@@ -76,9 +76,7 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
     }
 
     @Override
-    public int registerForCallback(RMIClientInterface client) throws RemoteException {
-
-        String username = client.getUsername();
+    public int registerForCallback(RMIClientInterface client,String username) throws RemoteException {
 
         WSUser user = registeredUser.get(username);
 
@@ -87,7 +85,7 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
 
         user.setRemoteClient(client);
 
-        System.out.println("registrata callback "+client.getUsername());
+        System.out.println("registrata callback "+username);
 
         return 0;
     }
