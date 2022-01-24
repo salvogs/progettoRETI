@@ -33,9 +33,6 @@ public class MainClient {
 
         String serverAddress = getStringParameter(result,"server");
         int tcpPort = getPortParameter(result,"tcpport");
-        int udpPort = getPortParameter(result,"udpport");
-        String multicastAddress = getStringParameter(result,"multicast");
-        int multicastPort = getPortParameter(result,"mcastport");
         String registryAddr = getStringParameter(result,"rmireghost");
         int registryPort = getPortParameter(result,"rmiregport");
         String regServiceName = getStringParameter(result,"rmiservicename");
@@ -64,10 +61,11 @@ public class MainClient {
                 String input = br.readLine().trim();
                 if (input.equals("")) continue;
 
-                if(decodeAndRunCommand(input.trim()) == -1) System.exit(0);
+                if(decodeAndRunCommand(input.trim()) == -2) System.exit(0);
             }
 
         } catch (Exception e) {
+            e.printStackTrace();
             System.exit(-1);
         }
 
@@ -110,17 +108,15 @@ public class MainClient {
 
 
 
-    private static int decodeAndRunCommand(String input) {
-
+    private static int decodeAndRunCommand(String input) throws IOException{
         // controllo prima se e' stata richiesta un' operazione senza parametri
-
         switch (input) {
             case "help":
                 help();
                 break;
             case "quit" : {
                 client.stop();
-                return -1;
+                return -2;
             }
             case "dnd on" :
                 client.enableDoNotDisturb();
@@ -226,8 +222,11 @@ public class MainClient {
                         break;
 
                         case "show" : {
-                            if(st.nextToken().equals("post"))
-                                new NoSuchElementException(); // todo cambiare?
+                            if(st.nextToken().equals("post")) {
+                                inputError();
+                                return -1;
+                            }
+
 
                             int idPost = Integer.parseInt(st.nextToken());
                             client.showPost(idPost);
@@ -268,19 +267,13 @@ public class MainClient {
                         }
                         break;
 
-
-
                         default:
-                            throw new NoSuchElementException(); // todo cambiare?
+                            inputError();
+                            return -1;
                     }
                 } catch (NoSuchElementException | IllegalArgumentException e){
-                    System.err.println("Input non valido, riprova");
-                    eCounter++;
-                    if(eCounter == 3) {
-                        eCounter = 0;
-                        System.out.println("Digita il comando 'help' per visualizzare la lista dei comandi");
-                    }
-                    return 0;
+                    inputError();
+                    return -1;
                 }
 
             }
@@ -290,6 +283,15 @@ public class MainClient {
 
         return 0;
 
+    }
+
+    private static void inputError() {
+        System.err.println("Input non valido, riprova");
+        eCounter++;
+        if(eCounter == 3) {
+            eCounter = 0;
+            System.out.println("Digita il comando 'help' per visualizzare la lista dei comandi");
+        }
     }
 
     private static void help() {

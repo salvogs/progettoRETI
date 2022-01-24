@@ -82,7 +82,7 @@ public class WSClient {
                     break;
 
                 } catch (IOException e) {
-                    System.err.println("ERRORE: Impossibile connettersi con il server,riprovo tra 1000ms");
+                    System.err.println("Errore: Impossibile connettersi con il server,riprovo tra 1000ms");
                     attempts++;
                     Thread.sleep(1000);
 
@@ -126,163 +126,148 @@ public class WSClient {
 
     }
 
-    public void login(String username, String password) {
+    public void login(String username, String password) throws IOException{
 
         if(loginUsername != null){
             System.err.println("Hai gia' effettuato il login come: "+loginUsername);
             return;
         }
 
-        try {
-            ObjectNode req = mapper.createObjectNode();
-            req.put("request-type", "login");
-            req.put("username", username);
-            req.put("password", password);
-            
-
-            writeRequest(mapper.writeValueAsString(req));
- 
-            // leggo risposta del server
-
-            String response = getResponse();
-
-            JsonNode res = mapper.readTree(response);
+        ObjectNode req = mapper.createObjectNode();
+        req.put("request-type", "login");
+        req.put("username", username);
+        req.put("password", password);
 
 
+        writeRequest(mapper.writeValueAsString(req));
 
-            int statusCode = getStatusCode(res);
+        // leggo risposta del server
 
+        String response = getResponse();
 
-            if (statusCode == HttpURLConnection.HTTP_OK) {
+        JsonNode res = mapper.readTree(response);
 
 
 
-                mcastListener = new MulticastListener(
-                        res.get("multicast-address").asText(),res.get("multicast-port").asInt(),doNotDisturb);
+        int statusCode = getStatusCode(res);
 
-                // avvio il thread in ascolto di notifiche sul MulticastSocket
 
-                mcastListenerThread = new Thread(mcastListener);
-                mcastListenerThread.start();
+        if (statusCode == HttpURLConnection.HTTP_OK) {
 
-                // leggo eventuale lista followers
 
-                retriveFollowers(res.get("followers"));
 
-                loginUsername = username;
+            mcastListener = new MulticastListener(
+                    res.get("multicast-address").asText(),res.get("multicast-port").asInt(),doNotDisturb);
 
-                this.clientCallback = new RMIClient(followers,doNotDisturb);
+            // avvio il thread in ascolto di notifiche sul MulticastSocket
 
-                // esporto stub clientCallback per permettere al server di notificare nuovi follow/unfollow
+            mcastListenerThread = new Thread(mcastListener);
+            mcastListenerThread.start();
 
-                try {
-                    RMIClientInterface stub = (RMIClientInterface) UnicastRemoteObject.exportObject(clientCallback,0);
+            // leggo eventuale lista followers
 
-                    // mi registro per ricevere notifiche
+            retriveFollowers(res.get("followers"));
 
-                    if(remoteServer.registerForCallback(stub,loginUsername) == -1) {
-                        System.err.println("registerForCallback fallita");
-                        System.exit(-1);
-                    }
+            loginUsername = username;
 
-                } catch (RemoteException e) {
-                    e.printStackTrace();
+            this.clientCallback = new RMIClient(followers,doNotDisturb);
+
+            // esporto stub clientCallback per permettere al server di notificare nuovi follow/unfollow
+
+            try {
+                RMIClientInterface stub = (RMIClientInterface) UnicastRemoteObject.exportObject(clientCallback,0);
+
+                // mi registro per ricevere notifiche
+
+                if(remoteServer.registerForCallback(stub,loginUsername) == -1) {
+                    System.err.println("registerForCallback fallita");
                     System.exit(-1);
                 }
 
-                System.out.println("login effettuato con successo");
+            } catch (RemoteException e) {
+                System.err.println("registerForCallback fallita");
+//                e.printStackTrace();
+                System.exit(-1);
+            }
 
-            }else
-                System.out.println(res.get("message").asText());
+            System.out.println("login effettuato con successo");
 
-
-        } catch (IOException e) {
-            e.printStackTrace();// todo bad response
-            System.exit(-1);
-        }
+        }else
+            System.out.println(res.get("message").asText());
 
 
     }
 
-    public void logout() {
+    public void logout() throws IOException {
 
         if(loginUsername == null){
             System.err.println("Effettua il login prima di disconnetterti");
             return;
         }
 
-        try {
-            
-            ObjectNode req = mapper.createObjectNode();
-            req.put("request-type","logout");
-            req.put("username",loginUsername);
-            
-            
-            writeRequest(mapper.writeValueAsString(req));
-
-            String response = getResponse();
-
-            JsonNode res = mapper.readTree(response);
-
-            int statusCode = getStatusCode(res);
-
-            if(statusCode == HttpURLConnection.HTTP_OK) {
-                loginUsername = null;
-                followers.clear();
-
-                mcastListener.stop();
-                try {
-                    mcastListenerThread.join();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-
-                System.out.println("logout effettuato con successo");
-            } else
-                System.out.println(res.get("message").asText());
 
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        ObjectNode req = mapper.createObjectNode();
+        req.put("request-type","logout");
+        req.put("username",loginUsername);
+
+
+        writeRequest(mapper.writeValueAsString(req));
+
+        String response = getResponse();
+
+        JsonNode res = mapper.readTree(response);
+
+        int statusCode = getStatusCode(res);
+
+        if(statusCode == HttpURLConnection.HTTP_OK) {
+            loginUsername = null;
+            followers.clear();
+
+            mcastListener.stop();
+            try {
+                mcastListenerThread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+            System.out.println("logout effettuato con successo");
+        } else
+            System.out.println(res.get("message").asText());
+
 
     }
 
 
-    public void listUsers() {
+    public void listUsers() throws IOException {
         if(loginUsername == null){
             System.err.println("Effettua prima il login");
             return;
         }
 
-        try {
-
-            ObjectNode req = mapper.createObjectNode();
-            req.put("request-type","list-users");
-            req.put("username",loginUsername);
-            
-            
-            writeRequest(mapper.writeValueAsString(req));
 
 
-            String response = getResponse();
-
-            JsonNode res = mapper.readTree(response);
-
-            int statusCode = getStatusCode(res);
-
-            if(statusCode == HttpURLConnection.HTTP_OK)
-                printJsonUserAndTags(res.get("users"));
-            else
-                System.out.println(res.get("message").asText());
+        ObjectNode req = mapper.createObjectNode();
+        req.put("request-type","list-users");
+        req.put("username",loginUsername);
 
 
+        writeRequest(mapper.writeValueAsString(req));
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
 
-        }
+        String response = getResponse();
+
+        JsonNode res = mapper.readTree(response);
+
+        int statusCode = getStatusCode(res);
+
+        if(statusCode == HttpURLConnection.HTTP_OK)
+            printJsonUserAndTags(res.get("users"));
+        else
+            System.out.println(res.get("message").asText());
+
+
+    }
 
 
     public void listFollowers() {
@@ -300,118 +285,98 @@ public class WSClient {
         printUserAndTags(followers);
     }
 
-    public void listFollowing() {
-        if(loginUsername == null){
-            System.err.println("Effettua prima il login");
-            return;
-        }
-
-        try {
-            ObjectNode req = mapper.createObjectNode();
-            req.put("request-type","list-following");
-            req.put("username",loginUsername);
-            
-            
-            writeRequest(mapper.writeValueAsString(req));
-
-
-            String response = getResponse();
-
-            JsonNode res = mapper.readTree(response);
-
-            int statusCode = getStatusCode(res);
-
-            if(statusCode == HttpURLConnection.HTTP_OK)
-                printJsonUserAndTags(res.get("users"));
-            else
-                System.out.println(res.get("message").asText());
-
-
-            } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-
-    }
-
-    public void followUser(String username) {
+    public void listFollowing() throws IOException {
         if(loginUsername == null){
             System.err.println("Effettua prima il login");
             return;
         }
 
 
-        try {
-
-            //            generator.setCodec(new ObjectMapper());
-
-            ObjectNode req = mapper.createObjectNode();
-            req.put("request-type","follow");
-            req.put("username",loginUsername);
-            req.put("to-follow",username);
-            
-            
-            writeRequest(mapper.writeValueAsString(req));
-
-            String response = getResponse();
-
-            JsonNode res = mapper.readTree(response);
-
-            int statusCode = getStatusCode(res);
-
-            if(statusCode == HttpURLConnection.HTTP_CREATED)
-                System.out.println("Ora segui "+username);
-            else
-                System.out.println(res.get("message").asText());
+        ObjectNode req = mapper.createObjectNode();
+        req.put("request-type","list-following");
+        req.put("username",loginUsername);
 
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        writeRequest(mapper.writeValueAsString(req));
+
+
+        String response = getResponse();
+
+        JsonNode res = mapper.readTree(response);
+
+        int statusCode = getStatusCode(res);
+
+        if(statusCode == HttpURLConnection.HTTP_OK)
+            printJsonUserAndTags(res.get("users"));
+        else
+            System.out.println(res.get("message").asText());
+
 
 
     }
 
-    public void unfollowUser(String username) {
+    public void followUser(String username) throws IOException {
         if(loginUsername == null){
             System.err.println("Effettua prima il login");
             return;
         }
 
 
-        try {
-
-            ObjectNode req = mapper.createObjectNode();
-            req.put("request-type","unfollow");
-            req.put("username",loginUsername);
-            req.put("to-unfollow",username);
-            
-            
-            writeRequest(mapper.writeValueAsString(req));
-
-            String response = getResponse();
-
-            JsonNode res = mapper.readTree(response);
-
-            int statusCode = getStatusCode(res);
-
-            if(statusCode == HttpURLConnection.HTTP_OK) {
-                JsonNode m = res.get("message");
-                System.out.println(m != null ? m.asText() : ("Hai smesso di seguire " + username));
-            } else
-                System.out.println(res.get("message").asText());
 
 
+        ObjectNode req = mapper.createObjectNode();
+        req.put("request-type","follow");
+        req.put("username",loginUsername);
+        req.put("to-follow",username);
 
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        writeRequest(mapper.writeValueAsString(req));
+
+        String response = getResponse();
+
+        JsonNode res = mapper.readTree(response);
+
+        int statusCode = getStatusCode(res);
+
+        if(statusCode == HttpURLConnection.HTTP_CREATED)
+            System.out.println("Ora segui "+username);
+        else
+            System.out.println(res.get("message").asText());
 
 
     }
 
-    public void createPost(String title, String content) {
+    public void unfollowUser(String username) throws IOException {
+        if(loginUsername == null){
+            System.err.println("Effettua prima il login");
+            return;
+        }
+
+
+
+        ObjectNode req = mapper.createObjectNode();
+        req.put("request-type","unfollow");
+        req.put("username",loginUsername);
+        req.put("to-unfollow",username);
+
+
+        writeRequest(mapper.writeValueAsString(req));
+
+        String response = getResponse();
+
+        JsonNode res = mapper.readTree(response);
+
+        int statusCode = getStatusCode(res);
+
+        if(statusCode == HttpURLConnection.HTTP_OK) {
+            JsonNode m = res.get("message");
+            System.out.println(m != null ? m.asText() : ("Hai smesso di seguire " + username));
+        } else
+            System.out.println(res.get("message").asText());
+
+    }
+
+    public void createPost(String title, String content) throws IOException{
 
         if(title == null || content == null)
             throw new IllegalArgumentException();
@@ -438,39 +403,32 @@ public class WSClient {
         if(ret) return;
 
 
-        try {
-
-            ObjectNode req = mapper.createObjectNode();
-            req.put("request-type","create-post");
-            req.put("username",loginUsername);
-            req.put("title",title);
-            req.put("content",content);
-            
-            
-            writeRequest(mapper.writeValueAsString(req));
-
-            String response = getResponse();
-
-            JsonNode res = mapper.readTree(response);
-
-            int statusCode = getStatusCode(res);
-
-            if(statusCode == HttpURLConnection.HTTP_CREATED) {
-                int idPost = res.get("id-post").asInt();
-                System.out.println("Nuovo post creato (id=" + idPost + ")");
-            }else
-                System.out.println(res.get("message").asText());
+        ObjectNode req = mapper.createObjectNode();
+        req.put("request-type","create-post");
+        req.put("username",loginUsername);
+        req.put("title",title);
+        req.put("content",content);
 
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        writeRequest(mapper.writeValueAsString(req));
+
+        String response = getResponse();
+
+        JsonNode res = mapper.readTree(response);
+
+        int statusCode = getStatusCode(res);
+
+        if(statusCode == HttpURLConnection.HTTP_CREATED) {
+            int idPost = res.get("id-post").asInt();
+            System.out.println("Nuovo post creato (id=" + idPost + ")");
+        }else
+            System.out.println(res.get("message").asText());
 
 
     }
 
 
-    public void deletePost(int idPost) {
+    public void deletePost(int idPost) throws IOException{
 
         if (loginUsername == null) {
             System.err.println("Effettua prima il login");
@@ -479,30 +437,25 @@ public class WSClient {
 
         if(wantDelete()) return;
 
-        try {
 
-            ObjectNode req = mapper.createObjectNode();
-            req.put("request-type", "delete-post");
-            req.put("username", loginUsername);
-            req.put("id-post", idPost);
-            
-            
-            writeRequest(mapper.writeValueAsString(req));
+        ObjectNode req = mapper.createObjectNode();
+        req.put("request-type", "delete-post");
+        req.put("username", loginUsername);
+        req.put("id-post", idPost);
 
-            String response = getResponse();
 
-            JsonNode res = mapper.readTree(response);
+        writeRequest(mapper.writeValueAsString(req));
 
-            int statusCode = getStatusCode(res);
+        String response = getResponse();
 
-            if (statusCode == HttpURLConnection.HTTP_OK)
-                System.out.println("Post "+idPost+" cancellato");
-            else
-                System.out.println(res.get("message").asText());
+        JsonNode res = mapper.readTree(response);
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        int statusCode = getStatusCode(res);
+
+        if (statusCode == HttpURLConnection.HTTP_OK)
+            System.out.println("Post "+idPost+" cancellato");
+        else
+            System.out.println(res.get("message").asText());
 
     }
 
@@ -527,72 +480,61 @@ public class WSClient {
             }
     }
 
-    public void showFeed() {
+    public void showFeed() throws IOException {
         if(loginUsername == null){
             System.err.println("Effettua prima il login");
             return;
         }
 
 
-        try {
+        ObjectNode req = mapper.createObjectNode();
+        req.put("request-type","show-feed");
+        req.put("username",loginUsername);
 
-            ObjectNode req = mapper.createObjectNode();
-            req.put("request-type","show-feed");
-            req.put("username",loginUsername);
+        writeRequest(mapper.writeValueAsString(req));
 
-            writeRequest(mapper.writeValueAsString(req));
+        String response = getResponse();
 
-            String response = getResponse();
+        JsonNode res = mapper.readTree(response);
 
-            JsonNode res = mapper.readTree(response);
+        int statusCode = getStatusCode(res);
 
-            int statusCode = getStatusCode(res);
-
-            if(statusCode == HttpURLConnection.HTTP_OK)
-                printJsonPostList(res.get("feed"));
-            else
-                System.out.println(res.get("message").asText());
-
-
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
+        if(statusCode == HttpURLConnection.HTTP_OK)
+            printJsonPostList(res.get("feed"));
+        else
+            System.out.println(res.get("message").asText());
 
     }
 
-    public void blog() {
+    public void blog() throws IOException {
         if(loginUsername == null){
             System.err.println("Effettua prima il login");
             return;
         }
 
-        try {
-            ObjectNode req = mapper.createObjectNode();
-            req.put("request-type","view-blog");
-            req.put("username",loginUsername);
+
+        ObjectNode req = mapper.createObjectNode();
+        req.put("request-type","view-blog");
+        req.put("username",loginUsername);
 
 
-            writeRequest(mapper.writeValueAsString(req));
+        writeRequest(mapper.writeValueAsString(req));
 
-            String response = getResponse();
+        String response = getResponse();
 
-            JsonNode res = mapper.readTree(response);
+        JsonNode res = mapper.readTree(response);
 
-            int statusCode = getStatusCode(res);
+        int statusCode = getStatusCode(res);
 
-            if(statusCode == HttpURLConnection.HTTP_OK) {
-                printJsonPostList(res.get("blog"));
-            }else
-                System.out.println(res.get("message").asText());
+        if(statusCode == HttpURLConnection.HTTP_OK) {
+            printJsonPostList(res.get("blog"));
+        }else
+            System.out.println(res.get("message").asText());
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
 
     }
 
-    public void rewinPost(int idPost) {
+    public void rewinPost(int idPost) throws IOException {
         if(idPost < 0)
             throw new IllegalArgumentException();
 
@@ -601,33 +543,28 @@ public class WSClient {
             return;
         }
 
-        try {
 
-            ObjectNode req = mapper.createObjectNode();
-            req.put("request-type", "rewin-post");
-            req.put("username",loginUsername);
-            req.put("id-post", idPost);
+        ObjectNode req = mapper.createObjectNode();
+        req.put("request-type", "rewin-post");
+        req.put("username",loginUsername);
+        req.put("id-post", idPost);
 
-            writeRequest(mapper.writeValueAsString(req));
+        writeRequest(mapper.writeValueAsString(req));
 
-            String response = getResponse();
+        String response = getResponse();
 
-            JsonNode res = mapper.readTree(response);
+        JsonNode res = mapper.readTree(response);
 
-            int statusCode = getStatusCode(res);
+        int statusCode = getStatusCode(res);
 
-            if (statusCode == HttpURLConnection.HTTP_CREATED)
-                System.out.println("Rewin del post "+idPost+" effettuato");
-            else
-                System.out.println(res.get("message").asText());
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
+        if (statusCode == HttpURLConnection.HTTP_CREATED)
+            System.out.println("Rewin del post "+idPost+" effettuato");
+        else
+            System.out.println(res.get("message").asText());
 
     }
 
-    public void ratePost(int idPost, String vote) {
+    public void ratePost(int idPost, String vote) throws IOException {
 
         if(idPost < 0 || !vote.equals("+1") && !vote.equals("-1"))
             throw new IllegalArgumentException();
@@ -638,37 +575,29 @@ public class WSClient {
         }
 
 
-        try {
+        ObjectNode req = mapper.createObjectNode();
+        req.put("request-type", "rate-post");
+        req.put("username",loginUsername);
+        req.put("id-post", idPost);
+        req.put("vote", Integer.parseInt(vote));
 
-            ObjectNode req = mapper.createObjectNode();
-            req.put("request-type", "rate-post");
-            req.put("username",loginUsername);
-            req.put("id-post", idPost);
-            req.put("vote", Integer.parseInt(vote));
+        writeRequest(mapper.writeValueAsString(req));
 
-            writeRequest(mapper.writeValueAsString(req));
+        String response = getResponse();
 
-            String response = getResponse();
+        JsonNode res = mapper.readTree(response);
 
-            JsonNode res = mapper.readTree(response);
+        int statusCode = getStatusCode(res);
 
-            int statusCode = getStatusCode(res);
-
-            if (statusCode == HttpURLConnection.HTTP_CREATED)
-                System.out.println("Il post "+idPost+" e' stato votato "+
-                        (vote.equals("+1") ? "positivamente" : "negativamente"));
-            else
-                System.out.println(res.get("message").asText());
-
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-
+        if (statusCode == HttpURLConnection.HTTP_CREATED)
+            System.out.println("Il post "+idPost+" e' stato votato "+
+                    (vote.equals("+1") ? "positivamente" : "negativamente"));
+        else
+            System.out.println(res.get("message").asText());
 
     }
 
-    public void addComment(int idPost, String comment) {
+    public void addComment(int idPost, String comment) throws IOException {
 
         if(idPost < 0 || comment == null)
             throw new IllegalArgumentException();
@@ -683,126 +612,109 @@ public class WSClient {
             return;
         }
 
+        ObjectNode req = mapper.createObjectNode();
+        req.put("request-type", "comment-post");
+        req.put("username",loginUsername);
+        req.put("id-post", idPost);
+        req.put("comment",comment);
 
-        try {
+        writeRequest(mapper.writeValueAsString(req));
 
-            ObjectNode req = mapper.createObjectNode();
-            req.put("request-type", "comment-post");
-            req.put("username",loginUsername);
-            req.put("id-post", idPost);
-            req.put("comment",comment);
-            
-            writeRequest(mapper.writeValueAsString(req));
+        String response = getResponse();
 
-            String response = getResponse();
+        JsonNode res = mapper.readTree(response);
 
-            JsonNode res = mapper.readTree(response);
+        int statusCode = getStatusCode(res);
 
-            int statusCode = getStatusCode(res);
+        if (statusCode == HttpURLConnection.HTTP_CREATED)
+            System.out.println("Commento pubblicato");
+        else
+            System.out.println(res.get("message").asText());
 
-            if (statusCode == HttpURLConnection.HTTP_CREATED)
-                System.out.println("Commento pubblicato");
-            else
-                System.out.println(res.get("message").asText());
-
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
     }
 
 
-    public void showPost(int idPost) {
+    public void showPost(int idPost) throws IOException {
         if(loginUsername == null){
             System.err.println("Effettua prima il login");
             return;
         }
 
 
-        try {
 
-            ObjectNode req = mapper.createObjectNode();
-            req.put("request-type", "show-post");
-            req.put("username",loginUsername);
-            req.put("id-post", idPost);
 
-            writeRequest(mapper.writeValueAsString(req));
+        ObjectNode req = mapper.createObjectNode();
+        req.put("request-type", "show-post");
+        req.put("username",loginUsername);
+        req.put("id-post", idPost);
 
-            String response = getResponse();
+        writeRequest(mapper.writeValueAsString(req));
 
-            JsonNode res = mapper.readTree(response);
+        String response = getResponse();
 
-            int statusCode = getStatusCode(res);
+        JsonNode res = mapper.readTree(response);
 
-            if (statusCode == HttpURLConnection.HTTP_OK) {
-                printJsonPost(res);
-            } else if (statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
-                System.err.println("Accesso non eseguito");
+        int statusCode = getStatusCode(res);
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        if (statusCode == HttpURLConnection.HTTP_OK) {
+            printJsonPost(res);
+        } else if (statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
+            System.err.println("Accesso non eseguito");
+
     }
 
-    public void getWallet() {
+    public void getWallet() throws IOException {
         if(loginUsername == null){
             System.err.println("Effettua prima il login");
             return;
         }
 
-        try {
 
-            ObjectNode req = mapper.createObjectNode();
-            req.put("request-type", "wallet");
-            req.put("username",loginUsername);
-            
+        ObjectNode req = mapper.createObjectNode();
+        req.put("request-type", "wallet");
+        req.put("username",loginUsername);
 
-            writeRequest(mapper.writeValueAsString(req));
 
-            String response = getResponse();
+        writeRequest(mapper.writeValueAsString(req));
 
-            JsonNode res = mapper.readTree(response);
+        String response = getResponse();
 
-            int statusCode = getStatusCode(res);
+        JsonNode res = mapper.readTree(response);
 
-            if (statusCode == HttpURLConnection.HTTP_OK) {
-                printJsonWallet(res);
-            } else if (statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
-                System.err.println("Accesso non eseguito");
+        int statusCode = getStatusCode(res);
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        if (statusCode == HttpURLConnection.HTTP_OK) {
+            printJsonWallet(res);
+        } else if (statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
+            System.err.println("Accesso non eseguito");
+
     }
 
-    public void getWalletInBitcoin() {
+    public void getWalletInBitcoin() throws IOException {
         if(loginUsername == null){
             System.err.println("Effettua prima il login");
             return;
         }
 
-        try {
 
-            ObjectNode req = mapper.createObjectNode();
-            req.put("request-type", "wallet-btc");
-            req.put("username",loginUsername);
+        ObjectNode req = mapper.createObjectNode();
+        req.put("request-type", "wallet-btc");
+        req.put("username",loginUsername);
 
 
-            writeRequest(mapper.writeValueAsString(req));
+        writeRequest(mapper.writeValueAsString(req));
 
-            String response = getResponse();
+        String response = getResponse();
 
-            JsonNode res = mapper.readTree(response);
+        JsonNode res = mapper.readTree(response);
 
-            int statusCode = getStatusCode(res);
+        int statusCode = getStatusCode(res);
 
-            if (statusCode == HttpURLConnection.HTTP_OK) {
-                System.out.println("Wallet BTC: "+res.get("wallet-btc").asText());
-            } else if (statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
-                System.err.println("Accesso non eseguito");
+        if (statusCode == HttpURLConnection.HTTP_OK) {
+            System.out.println("Wallet BTC: "+res.get("wallet-btc").asText());
+        } else if (statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
+            System.err.println("Accesso non eseguito");
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
     }
 
 
@@ -830,8 +742,6 @@ public class WSClient {
 
         if(request == null)
             throw new IllegalArgumentException();
-
-
         ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES+request.length());
         buffer.putInt(request.length());
         buffer.put(ByteBuffer.wrap(request.getBytes()));
@@ -1054,7 +964,7 @@ public class WSClient {
     }
 
 
-    public void stop() {
+    public void stop() throws IOException {
         if(loginUsername != null) this.logout();
         return;
     }

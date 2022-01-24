@@ -242,8 +242,8 @@ public class WSServer implements Runnable{
 
         try {
             serverChannel = ServerSocketChannel.open();
-            serverChannel.bind(new InetSocketAddress("localhost", tcpPort)); //todo togliere commento
-//            serverChannel.bind(new InetSocketAddress("192.168.8.127", tcpPort));
+            serverChannel.bind(new InetSocketAddress("localhost", tcpPort));
+
             //imposto il channel come non bloccante
             serverChannel.configureBlocking(false);
 
@@ -304,7 +304,10 @@ public class WSServer implements Runnable{
             // termino pool
             selector.close();
             pool.shutdown();
-            pool.awaitTermination(10, TimeUnit.SECONDS);
+            // attesa passiva con timeout fin quando tutti i thread del pool non sono terminati
+            while(!pool.isTerminated()) {
+                pool.awaitTermination(10, TimeUnit.SECONDS);
+            }
             // interrompo thread delegato al calcolo delle ricompense
             rewardsThread.interrupt();
             rewardsThread.join();
@@ -857,8 +860,6 @@ public class WSServer implements Runnable{
 
             ArrayNode pArray = mapper.createArrayNode();
 
-            int written = 0;
-
             /* non mi serve acquisire la lock perchè l'utente non può
                mandare altre richieste di following prima di ricevere la risposta
                */
@@ -882,7 +883,6 @@ public class WSServer implements Runnable{
 
                     pArray.add(pObject);
 
-                    written++;
                 }
 
                 fUser.unlockRead();
@@ -1034,6 +1034,9 @@ public class WSServer implements Runnable{
 
     public ObjectNode commentPost(String username, int idPost, String comment) throws IllegalArgumentException{
 
+        if(comment == null)
+            throw new IllegalArgumentException();
+
         ObjectNode response = mapper.createObjectNode();
 
         WSUser user = checkUser(username,response);
@@ -1130,7 +1133,7 @@ public class WSServer implements Runnable{
             user.unlockRead();
 
             response.put("status-code", HttpURLConnection.HTTP_OK);
-            response.put("wallet",user.getWallet());
+            response.put("wallet",wallet);
 
             if(!transactions.isEmpty()) {
                 ArrayNode tArray = mapper.createArrayNode();
@@ -1153,7 +1156,7 @@ public class WSServer implements Runnable{
         return response;
     }
 
-    public ObjectNode getWalletInBitcoin(String username) throws IllegalArgumentException{
+    public ObjectNode getWalletInBitcoin(String username) {
 
         ObjectNode response = mapper.createObjectNode();
 
@@ -1164,8 +1167,8 @@ public class WSServer implements Runnable{
             double wincoinWallet =  user.getWallet();
             user.unlockRead();
 
-            double walletBtc =  1.638344810037658 * getExchangeRate();
-//            double walletBtc =  wincoinWallet * getExchangeRate(); todo remove comment
+            double walletBtc =  wincoinWallet * getExchangeRate();
+
 
             response.put("status-code", HttpURLConnection.HTTP_OK);
 

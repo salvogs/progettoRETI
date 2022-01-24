@@ -1,8 +1,6 @@
 #
-#Questo è un esempio di file di configurazione.
 #Tutte le righe vuote o che iniziano con '#' verranno ignorate.
 #
-
 
 #Porta TCP del server
 TCPPORT=9000
