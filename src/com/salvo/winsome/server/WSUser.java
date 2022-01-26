@@ -6,7 +6,6 @@ import com.salvo.winsome.RMIClientInterface;
 import java.io.Serializable;
 import java.rmi.RemoteException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -31,7 +30,7 @@ public @Getter @Setter class WSUser implements Serializable {
     private HashSet<Integer> blog; //salvo gli id dei post creati dall'utente
 
     private double wallet;
-    private ArrayList<Transaction> transactions;
+    private ArrayList<WSTransaction> transactions;
 
     @JsonIgnore private boolean logged = false;
     @JsonIgnore private RMIClientInterface remoteClient;
@@ -138,7 +137,7 @@ public @Getter @Setter class WSUser implements Serializable {
 
 
 
-    public void addTranstaction(Transaction t) {
+    public void addTranstaction(WSTransaction t) {
         transactions.add(t);
     }
 

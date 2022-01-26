@@ -1,6 +1,6 @@
 package com.salvo.winsome.client;
 
-import com.salvo.winsome.Utils;
+import com.salvo.winsome.ConfigParser;
 
 
 import java.io.BufferedReader;
@@ -26,37 +26,35 @@ public class MainClient {
             System.exit(-1);
         }
 
-        HashMap<String,String> result = Utils.parsingConfigFile(args[0]);
+        HashMap<String,String> result = ConfigParser.parseConfigFile(args[0]);
 
         System.out.println(result);
 
 
-        String serverAddress = getStringParameter(result,"server");
-        int tcpPort = getPortParameter(result,"tcpport");
-        String registryAddr = getStringParameter(result,"rmireghost");
-        int registryPort = getPortParameter(result,"rmiregport");
-        String regServiceName = getStringParameter(result,"rmiservicename");
+        String serverAddress = ConfigParser.getStringParameter(result,"server");
+        int tcpPort = ConfigParser.getPortParameter(result,"tcpport");
+        String registryAddr = ConfigParser.getStringParameter(result,"rmireghost");
+        int registryPort = ConfigParser.getPortParameter(result,"rmiregport");
+        String regServiceName = ConfigParser.getStringParameter(result,"rmiservicename");
 
 
         client = new WSClient(serverAddress,tcpPort,registryAddr,registryPort,regServiceName);
 
 
-        System.out.println("\n" +
-                " _    _ _____ _   _  _____  ________  ___ _____ \n" +
-                "| |  | |_   _| \\ | |/  ___||  _  |  \\/  ||  ___|\n" +
-                "| |  | | | | |  \\| |\\ `--. | | | | .  . || |__  \n" +
-                "| |/\\| | | | | . ` | `--. \\| | | | |\\/| ||  __| \n" +
-                "\\  /\\  /_| |_| |\\  |/\\__/ /\\ \\_/ / |  | || |___ \n" +
-                " \\/  \\/ \\___/\\_| \\_/\\____/  \\___/\\_|  |_/\\____/ \n" +
-                "                                                \n" +
-                "                                                \n");
+//        System.out.println(
+//                " _    _ _____ _   _  _____  ________  ___ _____ \n" +
+//                "| |  | |_   _| \\ | |/  ___||  _  |  \\/  ||  ___|\n" +
+//                "| |  | | | | |  \\| |\\ `--. | | | | .  . || |__  \n" +
+//                "| |/\\| | | | | . ` | `--. \\| | | | |\\/| ||  __| \n" +
+//                "\\  /\\  /_| |_| |\\  |/\\__/ /\\ \\_/ / |  | || |___ \n" +
+//                " \\/  \\/ \\___/\\_| \\_/\\____/  \\___/\\_|  |_/\\____/");
 
 
         try( BufferedReader br = new BufferedReader(new InputStreamReader(System.in))) {
 
 
             System.out.println("Benvenuto in winsome:");
-            System.out.println("Digita 'help' per visualizzare la lista dei comandi, quit per uscire");
+            System.out.println("Digita 'help' per visualizzare la lista dei comandi, 'stop' per terminare l'esecuzione");
             while (true) {
                 String input = br.readLine().trim();
                 if (input.equals("")) continue;
@@ -71,41 +69,6 @@ public class MainClient {
 
     }
 
-    private static String getStringParameter(HashMap<String,String> result, String name) {
-
-        String parameter = result.get(name);
-
-        if(parameter == null) {
-            System.err.println("parsing \""+name+"\" fallito");
-            System.exit(-1);
-        }
-
-        return parameter;
-    }
-
-    private static int getPortParameter(HashMap<String,String> result, String portName) {
-
-        String port = result.get(portName);
-        int portnum = 0;
-
-        try {
-            if (port != null) {
-
-                portnum = Integer.parseInt(port);
-
-                if (portnum < 1024 || portnum > 65535) {
-                    System.err.println("porta \"" + portName + "\"non valida");
-                    System.exit(-1);
-                }
-            } else throw new NumberFormatException();
-        } catch (NumberFormatException e) {
-            System.err.println("parsing \""+portName+"\" fallito");
-            System.exit(-1);
-        }
-
-        return portnum;
-    }
-
 
 
     private static int decodeAndRunCommand(String input) throws IOException{
@@ -114,7 +77,7 @@ public class MainClient {
             case "help":
                 help();
                 break;
-            case "quit" : {
+            case "stop" : {
                 client.stop();
                 return -2;
             }

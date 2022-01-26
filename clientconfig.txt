@@ -16,6 +16,3 @@ RMIREGPORT=6789
 
 #Nome necessario al lookup dell'oggetto remoto sul registry
 RMISERVICENAME=REG-SERVICE
-
-#Timeout della socket
-TIMEOUT=10000010

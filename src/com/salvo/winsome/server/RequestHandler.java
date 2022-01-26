@@ -303,7 +303,7 @@ public class RequestHandler implements Runnable{
      * il dispatcher mandi la risposta quando il channel e' pronto in scrittura
      * @param response
      */
-    public void registerForResponse(String response) {
+    private void registerForResponse(String response) {
         ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES+response.length());
         buffer.putInt(response.length());
         buffer.put(ByteBuffer.wrap(response.getBytes()));

@@ -1,19 +1,8 @@
 package com.salvo.winsome.server;
 
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.Builder;
-import lombok.Getter;
 
-import javax.swing.text.Position;
 import java.io.*;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @author Salvatore Guastella
@@ -21,21 +10,24 @@ import java.util.concurrent.ConcurrentHashMap;
 @Builder(builderMethodName = "newBuilder")
 public class BackupHandler implements Runnable{
 
-    WSServer server;
+    private WSServer server;
+    private int backupPeriod;
 
-    public BackupHandler(WSServer server) {
+    public BackupHandler(WSServer server, int backupPeriod) {
         this.server = server;
+        this.backupPeriod = backupPeriod;
     }
 
     @Override
     public void run() {
+        System.out.println("Thread backup avviato");
         try {
 
             server.checkFiles();
 
             while (!Thread.currentThread().isInterrupted()) {
                 try {
-                    Thread.sleep(5000); // todo config
+                    Thread.sleep(this.backupPeriod); // odo config
 
                     server.performBackup();
                     System.out.println("BACKUP EFFETTUATO");

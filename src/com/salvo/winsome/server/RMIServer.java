@@ -3,7 +3,6 @@ package com.salvo.winsome.server;
 import com.salvo.winsome.RMIClientInterface;
 import com.salvo.winsome.RMIServerInterface;
 
-import java.lang.reflect.Array;
 import java.rmi.RemoteException;
 import java.rmi.server.RemoteServer;
 import java.util.*;
@@ -15,16 +14,16 @@ import java.util.concurrent.locks.Lock;
  */
 public class RMIServer extends RemoteServer implements RMIServerInterface {
 
-    private ConcurrentHashMap<String,WSUser> registeredUser;
+    private ConcurrentHashMap<String,WSUser> registeredUsers;
 
     private ConcurrentHashMap<String, ArrayList<String>> allTags;
     private Lock allTagsWriteLock;
 
-    public RMIServer(ConcurrentHashMap<String,WSUser> registeredUser,
+    public RMIServer(ConcurrentHashMap<String,WSUser> registeredUsers,
                      ConcurrentHashMap<String, ArrayList<String>> allTags,
                      Lock allTagsWriteLock) {
 
-        this.registeredUser = registeredUser;
+        this.registeredUsers = registeredUsers;
         this.allTags = allTags;
         this.allTagsWriteLock = allTagsWriteLock;
     }
@@ -34,7 +33,7 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
     @Override
     public synchronized int registerUser(String username, String password, String[] tags) throws RemoteException {
 
-        if(username == null || registeredUser.containsKey(username))
+        if(username == null || registeredUsers.containsKey(username))
             return -1;
 
         if(password == null || password.equals(""))
@@ -46,7 +45,7 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
 
         // aggiunge il nuovo utente nella HashMap
 
-        registeredUser.put(username,newUser);
+        registeredUsers.put(username,newUser);
 
         System.out.println("Registrato nuovo utente: \n username: "+username+"\n password: "+password+"\nlista tag: ");
 
@@ -78,7 +77,7 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
     @Override
     public int registerForCallback(RMIClientInterface client,String username) throws RemoteException {
 
-        WSUser user = registeredUser.get(username);
+        WSUser user = registeredUsers.get(username);
 
         if(user == null)
             return -1;

@@ -2,9 +2,7 @@ package com.salvo.winsome.server;
 
 import java.io.IOException;
 import java.net.*;
-import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -13,26 +11,27 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class RewardsHandler implements Runnable{
 
-    private static final int TIMEOUT = 30;//tempo in secondi todo parse
-
-    WSServer server;
+    private WSServer server;
+    private int rewardsPeriod;
+    private double authorPercentage;
     private final InetAddress multicastAddress;
     private final int multicastPort;
     private DatagramSocket dsocket;
 
 
-    private ConcurrentHashMap<Integer,Post> posts;
+    private ConcurrentHashMap<Integer, WSPost> posts;
     HashMap<Integer, HashSet<String>> upvotes;
     HashMap<Integer, HashSet<String>> downvotes;
     HashMap<Integer, ArrayList<String>> comments;
 
-    private double authorPercentage = 0.7; // todo config
-
 
     private int globalIterations;
 
-    public RewardsHandler(WSServer server) {
+    public RewardsHandler(WSServer server, double authorPercentage, int rewardsPeriod) {
         this.server = server;
+        this.authorPercentage = authorPercentage;
+        this.rewardsPeriod = rewardsPeriod; // in ms
+
         this.posts = server.getPosts();
 
         this.globalIterations = server.getRewardsIteration();
@@ -52,11 +51,12 @@ public class RewardsHandler implements Runnable{
     @Override
     public void run() {
 
+        System.out.println("Thread ricompense avviato");
 
         while (!Thread.currentThread().isInterrupted()) {
 
             try {
-                Thread.sleep(TIMEOUT*1000);
+                Thread.sleep(rewardsPeriod);
                 computeRewards();
 
             } catch (InterruptedException e) {
@@ -111,7 +111,7 @@ public class RewardsHandler implements Runnable{
             int n_downvote = downvotes.containsKey(idPost) ? downvotes.get(idPost).size() : 0;
             int n_comments = comments.containsKey(idPost) ? comments.get(idPost).size() : 0;
 
-            Post p = posts.get(idPost);
+            WSPost p = posts.get(idPost);
 
             if(p == null) continue; // controllo se il post è stato cancellato
 

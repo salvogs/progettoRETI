@@ -1,9 +1,5 @@
 package com.salvo.winsome.server;
 
-import com.fasterxml.jackson.core.JsonEncoding;
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,14 +7,10 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.salvo.winsome.RMIServerInterface;
-import lombok.Builder;
 import lombok.Getter;
-import lombok.experimental.PackagePrivate;
 
 import java.io.*;
-import java.lang.reflect.Array;
 import java.net.*;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.rmi.RemoteException;
@@ -30,8 +22,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
@@ -41,11 +33,13 @@ public class WSServer implements Runnable{
 
 
     private final int tcpPort;
-//    private final int udpPort;
-    @Getter private final InetAddress multicastAddress;
+    @Getter private InetAddress multicastAddress;
     @Getter private final int multicastPort;
     private final int regPort;
     private final String regServiceName;
+    private final double authorPercentage;
+    private final int rewardsPeriod;
+    private final int backupPeriod;
 
 
 
@@ -54,7 +48,7 @@ public class WSServer implements Runnable{
      * hash table degli utenti registrati
      */
 
-    private ConcurrentHashMap<String, WSUser> registeredUser;
+    private ConcurrentHashMap<String, WSUser> registeredUsers;
 
     private ConcurrentHashMap<String, ArrayList<String>> allTags;
 
@@ -64,7 +58,7 @@ public class WSServer implements Runnable{
 
     private RMIServer remoteServer;
 
-    private ConcurrentHashMap<Integer,String> hashUser; // corrispondenza hash ip
+    private ConcurrentHashMap<Integer,String> hashUser; // corrispondenza hash username
 
     int N_THREAD = 10; // todo config
 
@@ -72,9 +66,8 @@ public class WSServer implements Runnable{
 
     private static final int MSG_BUFFER_SIZE = 1024;
 
-    Object lock = new Object();
 
-    @Getter private ConcurrentHashMap<Integer, Post> posts;
+    @Getter private ConcurrentHashMap<Integer, WSPost> posts;
 
 
     ObjectMapper mapper;
@@ -84,33 +77,57 @@ public class WSServer implements Runnable{
     private HashMap<Integer, HashSet<String>> newDownvotes;
     private HashMap<Integer, ArrayList<String>> newComments;
 
-    private int idPostCounter;
-    private int rewardsIteration;
+    private AtomicInteger idPostCounter;
     private int idTransactionsCounter;
+    private int rewardsIteration;
     private double lastExchangeRate;
 
-    private File backupDir;
-    private File usersBackup;
-    private File postsBackup;
-    private File tagsBackup;
-    private File variablesBackup;
+    private final File backupDir;
+    private final File usersBackup;
+    private final File postsBackup;
+    private final File tagsBackup;
+    private final File variablesBackup;
 
 
     Selector selector = null; // per permettere il multiplexing dei channel
     boolean exit = false;
 
 
-    public WSServer(int tcpPort, int udpPort, int multicastPort, InetAddress multicastAddress, int regPort, String regServiceName) {
+    public WSServer(int tcpPort, int multicastPort, String multicastAddress, int regPort, String regServiceName,
+                    double authorPercentage, int rewardsPeriod, int backupPeriod) {
 
         this.tcpPort = tcpPort;
 
-
-        this.multicastAddress = multicastAddress;
+        try {
+        this.multicastAddress = InetAddress.getByName(multicastAddress);
+        if(!this.multicastAddress.isMulticastAddress())
+                throw new UnknownHostException();
+        } catch (UnknownHostException e) {
+            System.out.println ("indirizzo di multicast non valido");
+            System.exit(-1);
+        }
         this.multicastPort = multicastPort;
 
         this.regPort = regPort;
         this.regServiceName = regServiceName;
 
+        if(authorPercentage <= 0 || authorPercentage >= 1){ // todo relazione
+            System.err.println ("percentuale ricompense non valido");
+            System.exit(-1);
+        }
+        this.authorPercentage = authorPercentage;
+
+        if(rewardsPeriod < 1000){
+            System.err.println ("percentuale ricompense non valido");
+            System.exit(-1);
+        }
+        this.rewardsPeriod = rewardsPeriod;
+
+        if(backupPeriod < 1000){
+            System.err.println ("percentuale ricompense non valido");
+            System.exit(-1);
+        }
+        this.backupPeriod = backupPeriod;
 
         mapper = new ObjectMapper();
         mapper.enable(SerializationFeature.INDENT_OUTPUT);
@@ -119,26 +136,24 @@ public class WSServer implements Runnable{
         this.backupDir = new File("./backup");
         this.usersBackup = new File(backupDir + "/users.json");
         this.postsBackup = new File(backupDir + "/posts.json");
-        this.tagsBackup = new File(backupDir + "./tags.json");
-        this.variablesBackup = new File(backupDir + "./variables.json");
+        this.tagsBackup = new File(backupDir + "/tags.json");
+        this.variablesBackup = new File(backupDir + "/variables.json");
 
 
         if(restoreBackup() == -1) {
             System.err.println("Impossibile ripristinare backup");
             System.out.println("Inizializzazione server...");
-            this.registeredUser = new ConcurrentHashMap<>();
+            this.registeredUsers = new ConcurrentHashMap<>();
             this.posts = new ConcurrentHashMap<>();
             this.allTags = new ConcurrentHashMap<>();
-            this.idPostCounter = 0;
+            this.idPostCounter = new AtomicInteger();
             this.rewardsIteration = 0;
             this.idTransactionsCounter = 0;
             this.lastExchangeRate = 0;
         } else System.out.println("Backup ripristinato");
 
-        this.remoteServer = new RMIServer(registeredUser,allTags,allTagsWriteLock);
+        this.remoteServer = new RMIServer(registeredUsers,allTags,allTagsWriteLock);
         this.hashUser = new ConcurrentHashMap<>();
-
-        this.pool = (ThreadPoolExecutor) Executors.newFixedThreadPool(N_THREAD);
 
 
 
@@ -164,15 +179,15 @@ public class WSServer implements Runnable{
             ) {
 
 
-                registeredUser = mapper.readValue(usersReader, new TypeReference<ConcurrentHashMap<String, WSUser>>() {});
-                posts = mapper.readValue(postsReader, new TypeReference<ConcurrentHashMap<Integer, Post>>() {});
+                registeredUsers = mapper.readValue(usersReader, new TypeReference<ConcurrentHashMap<String, WSUser>>() {});
+                posts = mapper.readValue(postsReader, new TypeReference<ConcurrentHashMap<Integer, WSPost>>() {});
                 allTags = mapper.readValue(tagsReader, new TypeReference<ConcurrentHashMap<String, ArrayList<String>>>() {});
 
                 JsonNode variables = mapper.readTree(variableReader);
 
-                idPostCounter = variables.get("idpostcounter").asInt();
-                rewardsIteration = variables.get("rewardsiteration").asInt();
+                idPostCounter = new AtomicInteger(variables.get("idpostcounter").asInt());
                 idTransactionsCounter = variables.get("idtransactionscounter").asInt();
+                rewardsIteration = variables.get("rewardsiteration").asInt();
                 lastExchangeRate = variables.get("lastexchangerate").asDouble();
 
                 return 0;
@@ -190,11 +205,11 @@ public class WSServer implements Runnable{
 
 
     public void incrementWallet(String username, String timestamp, double value) {
-        WSUser user = registeredUser.get(username);
+        WSUser user = registeredUsers.get(username);
         if(user != null) {
             user.lockWrite();
             user.incrementWallet(value);
-            user.addTranstaction(new Transaction(idTransactionsCounter++,timestamp,value));
+            user.addTranstaction(new WSTransaction(idTransactionsCounter++,timestamp,value));
             user.unlockWrite();
         }
     }
@@ -206,15 +221,17 @@ public class WSServer implements Runnable{
 
     public void run() {
 
+        // creo un pool di thread che gestiranno le richieste dei client
+        this.pool = (ThreadPoolExecutor) Executors.newFixedThreadPool(N_THREAD);
 
         // creo e avvio thread per la gestione del backup
-        Thread backupThread = new Thread(new BackupHandler(this));
+        Thread backupThread = new Thread(new BackupHandler(this,backupPeriod));
         backupThread.start();
 
 
         // creo e avvio il thread per il calcolo delle ricompense
 
-        Thread rewardsThread = new Thread(new RewardsHandler(this));
+        Thread rewardsThread = new Thread(new RewardsHandler(this,authorPercentage,rewardsPeriod));
         rewardsThread.start();
 
 
@@ -222,7 +239,7 @@ public class WSServer implements Runnable{
             // esporto oggetto remoteServer
             RMIServerInterface stub = (RMIServerInterface) UnicastRemoteObject.exportObject(remoteServer, 0);
 
-            // creazione di un registry sulla porta parsata dal file di config
+            // creazione di un registry sulla porta specificata sul file di config
 
             Registry r = LocateRegistry.createRegistry(regPort);
 
@@ -233,6 +250,7 @@ public class WSServer implements Runnable{
 
         } catch (RemoteException e) {
             e.printStackTrace();
+            System.exit(-1);
         }
 
 
@@ -255,8 +273,8 @@ public class WSServer implements Runnable{
             serverChannel.register(selector, SelectionKey.OP_ACCEPT);
 
 
+            System.out.println("Digita 'stop' per terminare l'esecuzione\n");
             System.out.println("In attesa di connessioni sulla porta " + tcpPort);
-
             while (!exit) {
                 // operazione bloccante che aspetta che ci sia un channel ready
                 int n = selector.select();
@@ -301,8 +319,9 @@ public class WSServer implements Runnable{
             }
 
 
-            // termino pool
             selector.close();
+
+            // termino pool
             pool.shutdown();
             // attesa passiva con timeout fin quando tutti i thread del pool non sono terminati
             while(!pool.isTerminated()) {
@@ -316,8 +335,6 @@ public class WSServer implements Runnable{
             backupThread.interrupt();
             backupThread.join();
 
-
-            return;
 
         }catch (Exception e){
             e.printStackTrace();
@@ -356,7 +373,6 @@ public class WSServer implements Runnable{
 
 
     private void readMessage(Selector selector, SelectionKey key) throws IOException {
-
         SocketChannel clientChannel = (SocketChannel) key.channel();
 
         // recupero l'array di ByteBuffer [length, message] in attachment
@@ -387,11 +403,10 @@ public class WSServer implements Runnable{
 
                 bba[1].get(request);
 
-                /* non cancello la registrazione del channel ma non imposta alcuna
+                /* non cancello la registrazione del channel ma non imposto alcuna
                     operazione di interesse
 
-                    sarà il thread worker a impostare come interestOps la READ
-
+                    sarà il thread worker a settare un nuovo interestOps
                  */
                 key.interestOps(0);
 
@@ -447,7 +462,7 @@ public class WSServer implements Runnable{
         if (user != null) {
             user.lockWrite();
             if (!user.alreadyLogged()) {
-                /* non faccio la lock qui ma prima per evitare che un altro client faccia l'accesso
+                /* non faccio la lock qui ma prima, per evitare che un altro client faccia l'accesso
                     vedendo che nessuno è ancora loggato
                  */
 
@@ -473,13 +488,13 @@ public class WSServer implements Runnable{
 
                     if (!followers.isEmpty()) {
 
-                        ArrayNode fArray = mapper.createArrayNode();
+                       ArrayNode fArray = mapper.createArrayNode();
 
                        for(String f : followers) {
 
                            ObjectNode fObject = mapper.createObjectNode();
 
-                            WSUser follower = registeredUser.get(f);
+                            WSUser follower = registeredUsers.get(f);
 
                             fObject.put("username", f);
                             ArrayNode tArray = mapper.createArrayNode();
@@ -594,7 +609,7 @@ public class WSServer implements Runnable{
                     // array degli utenti
                     ArrayNode uArray = mapper.createArrayNode();
                     for(String u : toWrite) {
-                        WSUser uToWrite = registeredUser.get(u);
+                        WSUser uToWrite = registeredUsers.get(u);
 
                         ObjectNode uObject = mapper.createObjectNode();
                         uObject.put("username", u);
@@ -612,8 +627,6 @@ public class WSServer implements Runnable{
                     response.put("status-code", HttpURLConnection.HTTP_NO_CONTENT);
                     response.put("message","nessun utente con tag in comune");
                 }
-            } else {
-                user.unlockRead();
             }
         }
 
@@ -644,7 +657,7 @@ public class WSServer implements Runnable{
 
                     for(String u : followed) {
 
-                        WSUser f_user = registeredUser.get(u);
+                        WSUser f_user = registeredUsers.get(u);
                         ObjectNode uObject = mapper.createObjectNode();
                         /* non faccio alcuna lock perche' gli elementi che leggo (username e tags)
                             non possono essere modificati ( da altri thread )
@@ -684,9 +697,9 @@ public class WSServer implements Runnable{
             if (user != null && userToFollow != null) {
 
                 if (checkStatus(user,response) == 0) {
-                    user.lockWrite();
+                    //user.lockWrite();//non serve perchè solo l'utente loggato può accedere alla lista dei followers
                     boolean newFollowed = user.addFollowed(toFollow);
-                    user.unlockWrite();
+                    //user.unlockWrite();
                     if (newFollowed == true) {
                         userToFollow.lockWrite();
                         userToFollow.addFollower(username);
@@ -732,9 +745,9 @@ public class WSServer implements Runnable{
             if (user != null && userToUnfollow != null) {
                 if (checkStatus(user,response) == 0) {
 
-                    user.lockWrite();
+                    //user.lockWrite(); //non serve perchè solo l'utente loggato può accedere alla lista dei followers
                     boolean wasFollowed = user.removeFollowed(toUnfollow);
-                    user.unlockWrite();
+                    //user.unlockWrite();
                     if (wasFollowed == true) {
                         userToUnfollow.lockWrite();
                         userToUnfollow.removeFollower(username);
@@ -779,8 +792,8 @@ public class WSServer implements Runnable{
 
         if(user != null && checkStatus(user,response) == 0) {
 
-            int id = idPostCounter++;
-            Post p = new Post(id,username,title,content,rewardsIteration);
+            int id = idPostCounter.getAndIncrement();
+            WSPost p = new WSPost(id,username,title,content,rewardsIteration);
             // aggiungo il post alla Map di tutti i post
             posts.put(id,p);
 
@@ -807,7 +820,7 @@ public class WSServer implements Runnable{
 
         if(user != null && checkStatus(user,response) == 0) {
 
-            Post post = checkPost(idPost,response);
+            WSPost post = checkPost(idPost,response);
             if(post != null) {
                 post.lockWrite(); // aspetto se un thread sta leggendo/scrivendo il post
                 if(post.getAuthor().equals(username)) {
@@ -825,7 +838,7 @@ public class WSServer implements Runnable{
 
                     // cancello il post da tutti i blog degli utenti che lo hanno rewinnato
                     for(String r : rewiners) {
-                        WSUser rewiner = registeredUser.get(r);
+                        WSUser rewiner = registeredUsers.get(r);
                         rewiner.lockWrite();
                         rewiner.deletePost(idPost);
                         rewiner.unlockWrite();
@@ -865,27 +878,29 @@ public class WSServer implements Runnable{
                */
             for(String u : user.getFollowed()) {
 
-                WSUser fUser = registeredUser.get(u);
+                WSUser fUser = registeredUsers.get(u);
 
                 // lock dell'utente per evitare che aggiunga/rimuova posts
                 fUser.lockRead();
 
-                HashSet<Integer> blog = fUser.getBlog();
+                HashSet<Integer> blog = new HashSet<>(fUser.getBlog());
+
+                fUser.unlockRead();
 
                 for(Integer id : blog) {
 
-                    Post p = posts.get(id);
-                    ObjectNode pObject = mapper.createObjectNode();
+                    WSPost p = posts.get(id);
+                    if(p != null) {
+                        ObjectNode pObject = mapper.createObjectNode();
 
-                    pObject.put("id-post",p.getId());
-                    pObject.put("author",p.getAuthor());
-                    pObject.put("title",p.getTitle());
+                        pObject.put("id-post",p.getId());
+                        pObject.put("author",p.getAuthor());
+                        pObject.put("title",p.getTitle());
 
-                    pArray.add(pObject);
-
+                        pArray.add(pObject);
+                    }
                 }
 
-                fUser.unlockRead();
 
             }
 
@@ -900,7 +915,7 @@ public class WSServer implements Runnable{
 
         }
 
-       return response;
+        return response;
 
     }
 
@@ -914,35 +929,37 @@ public class WSServer implements Runnable{
 
             user.lockRead();
 
-            HashSet<Integer> blog = user.getBlog();
-
-            if(!blog.isEmpty()) {
-                response.put("status-code", HttpURLConnection.HTTP_OK);
-
-                ArrayNode pArray = mapper.createArrayNode();
-
-                for(Integer id : blog) {
-                    /* non mi serve fare la lock sul post perchè id,autore e titolo non possono cambiare
-                    * e per cancellare/aggiungere post sul blog è necessaria la lockWrite sull'utente
-                    * N.B. la lockWrite su user può essere acquisita se user ha fatto il rewin del post
-                     */
-                    Post p = posts.get(id);
-                    ObjectNode pObject = mapper.createObjectNode();
-                    pObject.put("id-post",p.getId());
-                    pObject.put("author",p.getAuthor());
-                    pObject.put("title",p.getTitle());
-
-                    pArray.add(pObject);
-                }
-                response.set("blog",pArray);
-
-            } else {
-                response.put("status-code", HttpURLConnection.HTTP_NO_CONTENT);
-                response.put("message","non sono presenti post da visualizzare");
-            }
+            HashSet<Integer> blog = new HashSet<>(user.getBlog());
 
             user.unlockRead();
 
+            ArrayNode pArray = mapper.createArrayNode();
+
+            for (Integer id : blog) {
+
+                WSPost p = posts.get(id);
+
+                if (p != null) {
+                    /* non mi serve fare la lock sul post perchè id,autore e titolo non possono cambiare
+                     * N.B. la lockWrite su user può essere acquisita se user ha fatto il rewin del post
+                     * e quindi se quel post viene cancellato -> p == null
+                     */
+                    ObjectNode pObject = mapper.createObjectNode();
+                    pObject.put("id-post", p.getId());
+                    pObject.put("author", p.getAuthor());
+                    pObject.put("title", p.getTitle());
+
+                    pArray.add(pObject);
+                }
+            }
+
+            if (pArray.size() == 0) {
+                response.put("status-code", HttpURLConnection.HTTP_NO_CONTENT);
+                response.put("message", "non sono presenti post da visualizzare");
+            } else {
+                response.put("status-code", HttpURLConnection.HTTP_OK);
+                response.set("blog", pArray);
+            }
         }
 
 
@@ -957,11 +974,11 @@ public class WSServer implements Runnable{
 
         if(user != null && checkStatus(user,response) == 0) {
 
-            Post post = checkPost(idPost,response);
+            WSPost post = checkPost(idPost,response);
             if(post != null) {
                 post.lockWrite();
                 // controllo se tra le due istruzioni precedenti un altro thread ha cancellato il post
-                if(!checkDeleted(post,response) && !checkAuthor(username,post,response) && checkFeed(user,post,response)) {
+                if(!checkDeleted(post,response) && !checkAuthor(username, post,response) && checkFeed(user, post,response)) {
                     user.lockWrite(); // per evitare letture inconsistenti alla showFeed e viewBlog
                     if (user.getBlog().add(idPost) == true) {
                         post.addRewiner(username);
@@ -991,11 +1008,11 @@ public class WSServer implements Runnable{
 
         if(user != null && checkStatus(user,response) == 0) {
 
-            Post post = checkPost(idPost,response);
+            WSPost post = checkPost(idPost,response);
             if(post != null) {
                 post.lockWrite();
 
-                if(!checkDeleted(post,response) && !checkAuthor(username,post,response) && checkFeed(user,post,response) && !alreadyVoted(username,post,response)) {
+                if(!checkDeleted(post,response) && !checkAuthor(username, post,response) && checkFeed(user, post,response) && !alreadyVoted(username, post,response)) {
 
                     if (vote == 1) {
                         post.newUpvote(username);
@@ -1044,14 +1061,14 @@ public class WSServer implements Runnable{
 
         if(user != null && checkStatus(user,response) == 0) {
 
-            Post post = checkPost(idPost,response);
+            WSPost post = checkPost(idPost,response);
 
             if(post != null) {
                 post.lockWrite();
-                if(!checkDeleted(post,response) && !checkAuthor(username,post,response) && checkFeed(user,post,response)) {
+                if(!checkDeleted(post,response) && !checkAuthor(username, post,response) && checkFeed(user, post,response)) {
                     post.newComment(username, comment);
 
-                    // memorizzo nuvo commento
+                    // memorizzo nuovo commento
 
                     synchronized (newComments) {
                         newComments.putIfAbsent(idPost,new ArrayList<>());
@@ -1081,7 +1098,7 @@ public class WSServer implements Runnable{
 
         if(user != null && checkStatus(user,response) == 0) {
 
-            Post post = checkPost(idPost,response);
+            WSPost post = checkPost(idPost,response);
 
             if(post != null) {
 
@@ -1092,12 +1109,12 @@ public class WSServer implements Runnable{
                     or il post e' nel blog di user (quindi anche rewinned)
                     or il post e' nel feed di user
                  */
-                if(!checkDeleted(post,response) && post.getAuthor().equals(username) || user.getBlog().contains(idPost) || checkFeed(user,post,response)) {
+                if(!checkDeleted(post,response) && post.getAuthor().equals(username) || user.getBlog().contains(idPost) || checkFeed(user, post,response)) {
                     response.put("status-code", HttpURLConnection.HTTP_OK);
-                    response.put("title",post.getTitle());
-                    response.put("content",post.getContent());
-                    response.put("upvote",post.getUpvote().size());
-                    response.put("downvote",post.getDownvote().size());
+                    response.put("title", post.getTitle());
+                    response.put("content", post.getContent());
+                    response.put("upvote", post.getUpvote().size());
+                    response.put("downvote", post.getDownvote().size());
 
                     ArrayNode cArray = mapper.createArrayNode();
                     for(Map.Entry<String,ArrayList<String>> c : post.getComments().entrySet()) {
@@ -1128,7 +1145,7 @@ public class WSServer implements Runnable{
         if(user != null && checkStatus(user,response) == 0) {
 
             user.lockRead();
-            ArrayList<Transaction> transactions = new ArrayList<>(user.getTransactions());
+            ArrayList<WSTransaction> transactions = new ArrayList<>(user.getTransactions());
             double wallet = user.getWallet();
             user.unlockRead();
 
@@ -1138,7 +1155,7 @@ public class WSServer implements Runnable{
             if(!transactions.isEmpty()) {
                 ArrayNode tArray = mapper.createArrayNode();
 
-                for (Transaction t : transactions) {
+                for (WSTransaction t : transactions) {
                     ObjectNode tObject = mapper.createObjectNode();
                     tObject.put("id", t.getId());
                     tObject.put("timestamp", t.getTimestamp());
@@ -1218,7 +1235,7 @@ public class WSServer implements Runnable{
      * @return true se il post appartiene al feed dell'utente,
      *          false altrimenti
      */
-    private boolean checkFeed(WSUser user, Post post,ObjectNode response) {
+    private boolean checkFeed(WSUser user, WSPost post, ObjectNode response) {
 
         /**
          * verifico se l'utente segue l'autore del post
@@ -1243,7 +1260,7 @@ public class WSServer implements Runnable{
      * @return true se il post e' di @username, false altrimenti
      * @throws IOException
      */
-    private boolean checkAuthor(String username,Post post,ObjectNode response) {
+    private boolean checkAuthor(String username, WSPost post, ObjectNode response) {
         if(post.getAuthor().equals(username)){
             response.put("status-code",HttpURLConnection.HTTP_FORBIDDEN);
             response.put("message", "non puoi commentare/votare/rewinnare i tuoi post");
@@ -1254,10 +1271,10 @@ public class WSServer implements Runnable{
 
     }
 
-    private boolean alreadyVoted(String username, Post post,ObjectNode response) {
+    private boolean alreadyVoted(String username, WSPost post, ObjectNode response) {
         if(post.voted(username) == true) {
             response.put("status-code",HttpURLConnection.HTTP_FORBIDDEN);
-            response.put("message", "hai gia' votato il post "+post.getId());
+            response.put("message", "hai gia' votato il post "+ post.getId());
             return true;
         }
 
@@ -1291,7 +1308,7 @@ public class WSServer implements Runnable{
         if(username == null)
             throw new IllegalArgumentException();
 
-        WSUser user = registeredUser.get(username);
+        WSUser user = registeredUsers.get(username);
 
         if(user == null) {
             response.put("status-code",HttpURLConnection.HTTP_UNAUTHORIZED);
@@ -1314,12 +1331,12 @@ public class WSServer implements Runnable{
     }
 
 
-    private Post checkPost(int id,ObjectNode response) throws IllegalArgumentException{
+    private WSPost checkPost(int id, ObjectNode response) throws IllegalArgumentException{
 
         if(id < 0)
             throw new IllegalArgumentException();
 
-        Post post = posts.get(id);
+        WSPost post = posts.get(id);
 
         if(post == null) {
             response.put("status-code",HttpURLConnection.HTTP_NOT_FOUND);
@@ -1332,7 +1349,7 @@ public class WSServer implements Runnable{
     }
 
 
-    private boolean checkDeleted(Post p,ObjectNode response) {
+    private boolean checkDeleted(WSPost p, ObjectNode response) {
         if(p.isDeleted()){
             response.put("status-code",HttpURLConnection.HTTP_NOT_FOUND);
             response.put("message", "post "+p.getId()+" non trovato");
@@ -1371,15 +1388,15 @@ public class WSServer implements Runnable{
 
     public void performBackup() throws IOException {
 
-        mapper.writeValue(usersBackup,registeredUser);
+        mapper.writeValue(usersBackup, registeredUsers);
         mapper.writeValue(postsBackup,posts);
         mapper.writeValue(tagsBackup,allTags);
 
         ObjectNode variables = mapper.createObjectNode();
 
-        variables.put("idpostcounter",idPostCounter);
-        variables.put("rewardsiteration",rewardsIteration);
+        variables.put("idpostcounter",idPostCounter.get());
         variables.put("idtransactionscounter",idTransactionsCounter);
+        variables.put("rewardsiteration",rewardsIteration);
         variables.put("lastexchangerate",lastExchangeRate).asDouble();
 
 
@@ -1389,14 +1406,14 @@ public class WSServer implements Runnable{
     }
 
 
-    public void go() {
+    public void go() { // todo remove
 
-        registeredUser.put("u1", new WSUser("u1", "a", null));
-        registeredUser.put("u2", new WSUser("u2", "", null));
-        registeredUser.put("u3", new WSUser("u3", "", null));
-        registeredUser.put("u4", new WSUser("u4", "", null));
-        registeredUser.put("u5", new WSUser("u5", "", null));
-        registeredUser.put("u6", new WSUser("u6", "", null));
+        registeredUsers.put("u1", new WSUser("u1", "a", null));
+        registeredUsers.put("u2", new WSUser("u2", "", null));
+        registeredUsers.put("u3", new WSUser("u3", "", null));
+        registeredUsers.put("u4", new WSUser("u4", "", null));
+        registeredUsers.put("u5", new WSUser("u5", "", null));
+        registeredUsers.put("u6", new WSUser("u6", "", null));
 
         // Add some relationships between users
 

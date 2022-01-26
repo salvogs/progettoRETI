@@ -90,7 +90,7 @@ public class WSClient {
             }while(attempts < 10);
 
             if(attempts == 10) {
-                System.out.println("connessione fallita");
+                System.out.println("Connessione fallita");
                 System.exit(-1);
             }
 
@@ -223,7 +223,6 @@ public class WSClient {
         if(statusCode == HttpURLConnection.HTTP_OK) {
             loginUsername = null;
             followers.clear();
-
             mcastListener.stop();
             try {
                 mcastListenerThread.join();
@@ -738,7 +737,7 @@ public class WSClient {
         System.out.println("Notifiche abilitate");
     }
     
-    private void writeRequest(String request) throws IllegalArgumentException, IOException{
+    private void writeRequest(String request) throws IllegalArgumentException, IOException {
 
         if(request == null)
             throw new IllegalArgumentException();
@@ -748,34 +747,41 @@ public class WSClient {
 
         buffer.flip();
 
-        while(buffer.hasRemaining())
-            socket.write(buffer);
-        
+        try {
+            while (buffer.hasRemaining())
+                socket.write(buffer);
+
+        } catch (IOException e) {
+            System.err.println("Errore: Impossibile inviare richiesta");
+            socket.close();
+            System.exit(-1);
+        }
 
     }
 
     private String getResponse() throws IOException {
 
         ByteBuffer length = ByteBuffer.allocate(Integer.BYTES);
-
-        // leggo prima parte payload [length]
-
-        socket.read(length);
-        length.flip();
-        int res_l = length.getInt();
-
-
-        ByteBuffer response = ByteBuffer.allocate(res_l);
-
-        socket.read(response);
+        ByteBuffer response = null;
+        try {
+            // leggo prima parte payload [length]
+            socket.read(length);
+            length.flip();
+            int res_l = length.getInt();
 
 
+            response = ByteBuffer.allocate(res_l);
+            socket.read(response);
+
+
+        } catch (IOException e) {
+            System.err.println("Errore: Impossibile leggere risposta");
+            socket.close();
+            System.exit(-1);
+        }
 
         String res = new String(response.array());
-
-
         System.out.println(res);
-
         return res;
 
     }
@@ -966,6 +972,7 @@ public class WSClient {
 
     public void stop() throws IOException {
         if(loginUsername != null) this.logout();
+        socket.close();
         return;
     }
 

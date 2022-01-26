@@ -9,13 +9,13 @@ import lombok.Setter;
  */
 
 @Getter @Setter @NoArgsConstructor
-public class Transaction {
+public class WSTransaction {
 
     private int id;
     private String timestamp;
     private double value;
 
-    public Transaction(int id, String timestamp, double value) {
+    public WSTransaction(int id, String timestamp, double value) {
         this.id = id;
         this.timestamp = timestamp;
         this.value = value;

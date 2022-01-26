@@ -15,7 +15,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * @author Salvatore Guastella
  */
 @NoArgsConstructor
-public @Getter @Setter class Post {
+public @Getter @Setter class WSPost {
     private int id;
     private String author;
     private String title;
@@ -41,7 +41,7 @@ public @Getter @Setter class Post {
 
     @JsonIgnore private boolean deleted;
 
-    public Post(int id, String author, String title, String content,int n_iterations) {
+    public WSPost(int id, String author, String title, String content, int n_iterations) {
         this.id = id;
         this.author = author;
         this.title = title;
@@ -68,9 +68,7 @@ public @Getter @Setter class Post {
 
     public void newComment(String username, String comment) {
 
-        if(!comments.containsKey(username))
-            comments.put(username,new ArrayList<>());
-
+        comments.putIfAbsent(username,new ArrayList<>());
         comments.get(username).add(comment);
     }
 

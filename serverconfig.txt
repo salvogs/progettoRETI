@@ -5,9 +5,6 @@
 #Porta TCP del server
 TCPPORT=9000
 
-#Porta UDP del server
-UDPPORT=33333
-
 #Indirizzo di multicast
 MULTICAST=239.255.1.3
 
@@ -20,5 +17,12 @@ RMIREGPORT=6789
 #Nome necessario al binding dell'oggetto remoto sul registry
 RMISERVICENAME=REG-SERVICE
 
-#Timeout della socket
-TIMEOUT=10000010
+#tasso di wincoin da assegnare all'autore del post
+AUTHORPERCENTAGE=0.70
+
+#Ogni quanti ms calcolare le ricompense
+REWARDSPERIOD=30000
+
+#Ogni quanti ms fare il backup
+BACKUPPERIOD=10000
+
