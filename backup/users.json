@@ -2,69 +2,83 @@
   "a" : {
     "username" : "a",
     "password" : "a",
-    "tags" : [ ],
-    "followers" : [ "pippo" ],
-    "followed" : [ "u1", "u2", "pippo" ],
-    "blog" : [ 0 ],
-    "wallet" : 0.05941261547656673,
+    "tags" : [ "tag1", "musica" ],
+    "followers" : [ "c", "d", "salvo" ],
+    "followed" : [ "c", "salvo" ],
+    "blog" : [ 0, 1 ],
+    "wallet" : 0.46498623362562996,
     "transactions" : [ {
-      "id" : 1,
-      "timestamp" : "28-01-2022 16:39:57",
-      "value" : 0.05941261547656673
+      "id" : 0,
+      "timestamp" : "28-01-2022 19:52:11",
+      "value" : 0.24260151319598083
+    }, {
+      "id" : 2,
+      "timestamp" : "28-01-2022 19:52:41",
+      "value" : 0.16173434213065388
+    }, {
+      "id" : 6,
+      "timestamp" : "28-01-2022 19:55:11",
+      "value" : 0.06065037829899521
     } ]
   },
-  "s" : {
-    "username" : "s",
-    "password" : "s",
-    "tags" : [ "sidjid", "djnd" ],
+  "b" : {
+    "username" : "b",
+    "password" : "b",
+    "tags" : [ "sport" ],
     "followers" : [ ],
     "followed" : [ ],
     "blog" : [ ],
     "wallet" : 0.0,
     "transactions" : [ ]
   },
-  "u1" : {
-    "username" : "u1",
-    "password" : "1",
-    "tags" : [ "t1", "t2" ],
+  "c" : {
+    "username" : "c",
+    "password" : "c",
+    "tags" : [ "tag1" ],
     "followers" : [ "a" ],
-    "followed" : [ ],
-    "blog" : [ ],
-    "wallet" : 0.0,
-    "transactions" : [ ]
-  },
-  "u2" : {
-    "username" : "u2",
-    "password" : "2",
-    "tags" : [ "t2" ],
-    "followers" : [ "a", "u3" ],
-    "followed" : [ "u3" ],
-    "blog" : [ ],
-    "wallet" : 0.0,
-    "transactions" : [ ]
-  },
-  "pippo" : {
-    "username" : "pippo",
-    "password" : "pippo",
-    "tags" : [ "sport" ],
-    "followers" : [ "a" ],
-    "followed" : [ "a" ],
-    "blog" : [ 1, 2 ],
-    "wallet" : 0.13862943611198905,
+    "followed" : [ "a", "d", "salvo" ],
+    "blog" : [ 3, 4 ],
+    "wallet" : 0.23393717343898157,
     "transactions" : [ {
-      "id" : 0,
-      "timestamp" : "28-01-2022 16:39:57",
-      "value" : 0.13862943611198905
+      "id" : 5,
+      "timestamp" : "28-01-2022 19:53:41",
+      "value" : 0.20794415416798362
+    }, {
+      "id" : 7,
+      "timestamp" : "28-01-2022 19:55:11",
+      "value" : 0.025993019270997952
     } ]
   },
-  "u3" : {
-    "username" : "u3",
-    "password" : "3",
-    "tags" : [ "t1" ],
-    "followers" : [ "u2" ],
-    "followed" : [ "u2" ],
+  "d" : {
+    "username" : "d",
+    "password" : "d",
+    "tags" : [ "sport" ],
+    "followers" : [ "c", "salvo" ],
+    "followed" : [ "a" ],
     "blog" : [ ],
     "wallet" : 0.0,
     "transactions" : [ ]
+  },
+  "salvo" : {
+    "username" : "salvo",
+    "password" : "s",
+    "tags" : [ "musica", "sport" ],
+    "followers" : [ "a", "c" ],
+    "followed" : [ "a", "d" ],
+    "blog" : [ 2 ],
+    "wallet" : 0.658489821531948,
+    "transactions" : [ {
+      "id" : 1,
+      "timestamp" : "28-01-2022 19:52:11",
+      "value" : 0.10397207708399181
+    }, {
+      "id" : 3,
+      "timestamp" : "28-01-2022 19:52:41",
+      "value" : 0.06931471805599454
+    }, {
+      "id" : 4,
+      "timestamp" : "28-01-2022 19:53:41",
+      "value" : 0.48520302639196167
+    } ]
   }
 }

@@ -2,6 +2,9 @@ package com.salvo.winsome.server;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.salvo.winsome.RMIClientInterface;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.io.Serializable;
 import java.rmi.RemoteException;
@@ -10,13 +13,12 @@ import java.util.HashSet;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import lombok.*;
+
 
 /**
  * @author Salvatore Guastella
  */
-//@NoArgsConstructor
-
+@NoArgsConstructor
 public @Getter @Setter class WSUser implements Serializable {
 
     private String username;
@@ -33,22 +35,16 @@ public @Getter @Setter class WSUser implements Serializable {
     private ArrayList<WSTransaction> transactions;
 
     @JsonIgnore private boolean logged = false;
-    @JsonIgnore private RMIClientInterface remoteClient;
+    @JsonIgnore private RMIClientInterface remoteClient = null;
 
-    @JsonIgnore private int sessionId;
+    @JsonIgnore private int sessionId = -1;
 
 
-    @JsonIgnore private ReentrantReadWriteLock readWriteLock;
+    @JsonIgnore private ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 
-    @JsonIgnore private Lock readLock;
-    @JsonIgnore private Lock writeLock;
+    @JsonIgnore private Lock readLock = readWriteLock.readLock();
+    @JsonIgnore private Lock writeLock = readWriteLock.writeLock();
 
-    public WSUser(){
-        sessionId = -1;
-        readWriteLock = new ReentrantReadWriteLock();
-        readLock = readWriteLock.readLock();
-        writeLock = readWriteLock.writeLock();
-    }
 
     /**
      * nuovo utente
@@ -60,23 +56,11 @@ public @Getter @Setter class WSUser implements Serializable {
         this.username = username;
         this.password = password;
         this.tags = tags;
-        this.logged = false;
-
-        this.sessionId = -1;
-
-        this.remoteClient = null;
-
         this.followers = new HashSet<>();
         this.followed = new HashSet<>();
-
         this.blog = new HashSet<>();
         this.wallet = 0;
-
         this.transactions = new ArrayList<>();
-
-        this.readWriteLock = new ReentrantReadWriteLock();
-        this.readLock = readWriteLock.readLock();
-        this.writeLock = readWriteLock.writeLock();
     }
 
 
@@ -105,7 +89,7 @@ public @Getter @Setter class WSUser implements Serializable {
     }
 
     public boolean checkPassword(String password){
-        return this.password.equals(password) ? true : false;
+        return this.password.equals(password);
     }
 
 

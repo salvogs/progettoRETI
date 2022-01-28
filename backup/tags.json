@@ -1,7 +1,5 @@
 {
-  "sidjid" : [ "s" ],
-  "djnd" : [ "s" ],
-  "t1" : [ "u1", "u3" ],
-  "sport" : [ "pippo" ],
-  "t2" : [ "u1", "u2" ]
+  "tag1" : [ "a", "c" ],
+  "musica" : [ "salvo", "a" ],
+  "sport" : [ "salvo", "b", "d" ]
 }

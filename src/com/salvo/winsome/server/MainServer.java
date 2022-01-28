@@ -17,27 +17,28 @@ public class MainServer {
 
 
         if(args.length < 1 ) {
-            System.err.println("usage: java MainServer <config path> [n workers]");
+            System.err.println("usage: java MainServer <config_path> [n_workers]");
             System.exit(-1);
         }
 
         HashMap<String,String> result = ConfigParser.parseConfigFile(args[0]);
 
-        System.out.println(result);
+        System.out.println(result); // stampo i campi letti
 
         int nWorkers = 10;
 
+        // controllo se è stato passato il parametro n_workers
         if(args.length >= 2) {
             try {
                 int n = Integer.parseInt(args[1]);
                 if (n > 0) nWorkers = n;
             } catch (NumberFormatException e) {
-                System.err.println("usage: java MainServer <config path> [n worker]");
+                System.err.println("usage: java MainServer <config path> [n_workers]");
                 System.exit(-1);
             }
         }
 
-        System.out.println("n workers: "+nWorkers);
+        System.out.println("n_workers: "+nWorkers);
 
         System.out.println("Avvio server...");
 
@@ -50,13 +51,18 @@ public class MainServer {
         int rewardsPeriod = ConfigParser.getPositiveIntegerParameter(result,"rewardsperiod");
         int backupPeriod = ConfigParser.getPositiveIntegerParameter(result,"backupperiod");
 
+
+
+        // creo e avvio il thread dispatcher
+
         WSServer server = new WSServer(nWorkers,tcpPort,multicastPort,multicastAddress,regPort,
                                        regServiceName,authorPercentage,rewardsPeriod,backupPeriod);
-
 
         Thread serverThread = new Thread(server);
         serverThread.start();
 
+
+        // in attesa che l'utente fermi il server
         Scanner s = new Scanner(System.in);
         while(true) {
             String in = s.nextLine();

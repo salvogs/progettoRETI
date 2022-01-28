@@ -1,7 +1,5 @@
 package com.salvo.winsome.client;
 
-import com.fasterxml.jackson.core.*;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -10,29 +8,19 @@ import com.salvo.winsome.RMIClientInterface;
 import com.salvo.winsome.RMIServerInterface;
 
 import java.io.BufferedReader;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.MulticastSocket;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
-import java.rmi.NotBoundException;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
-import java.sql.Timestamp;
-import java.text.SimpleDateFormat;
-import java.time.LocalDate;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Pattern;
 
 
 /**
@@ -476,7 +464,7 @@ public class WSClient {
 
             } catch (IOException e) {}
                 System.out.println("Inserisci \"y\" o \"n\":");
-            }
+        }
     }
 
     public void showFeed() throws IOException {
@@ -781,7 +769,7 @@ public class WSClient {
         }
 
         String res = new String(response.array());
-        System.out.println(res);
+//        System.out.println(res);
         return res;
 
     }
@@ -926,7 +914,7 @@ public class WSClient {
     }
 
     private void printJsonWallet(JsonNode wallet) {
-        System.out.println("Wallet->>> "+wallet.get("wallet").asText() + " wincoins");
+        System.out.println("Wallet: "+wallet.get("wallet").asText() + " wincoins");
 
         JsonNode transactions = wallet.get("transactions");
 
@@ -973,7 +961,6 @@ public class WSClient {
     public void stop() throws IOException {
         if(loginUsername != null) this.logout();
         socket.close();
-        return;
     }
 
 

@@ -105,8 +105,4 @@ public @Getter @Setter class WSPost {
         deleted = true;
     }
 
-
-//    public int incAndGetN_iterations() {
-//        return ++n_iterations;
-//    }
 }

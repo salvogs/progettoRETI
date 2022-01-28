@@ -1,17 +1,15 @@
 package com.salvo.winsome.server;
 
 import lombok.Builder;
-
 import java.io.*;
 
 /**
  * @author Salvatore Guastella
  */
-@Builder(builderMethodName = "newBuilder")
 public class BackupHandler implements Runnable{
 
-    private WSServer server;
-    private int backupPeriod;
+    private final WSServer server;
+    private final int backupPeriod;
 
     public BackupHandler(WSServer server, int backupPeriod) {
         this.server = server;
@@ -22,7 +20,7 @@ public class BackupHandler implements Runnable{
     public void run() {
         System.out.println("Thread backup avviato");
         try {
-
+            // controllo se esistono i file dove fare il backup (altrimenti li creo)
             server.checkFiles();
 
             while (!Thread.currentThread().isInterrupted()) {
@@ -39,7 +37,6 @@ public class BackupHandler implements Runnable{
             }
 
             // effettuo il backup per l'ultima volta
-
             server.performBackup();
             System.out.println("Ultimo backup effettuato");
             return;

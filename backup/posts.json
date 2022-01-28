@@ -2,36 +2,61 @@
   "0" : {
     "id" : 0,
     "author" : "a",
-    "title" : "ciddhjdsuif jfbf",
-    "content" : "ckcddkf fndfnkdsf",
-    "upvote" : [ ],
-    "downvote" : [ ],
+    "title" : "titolo",
+    "content" : "contenuto",
+    "upvote" : [ "c", "salvo" ],
+    "downvote" : [ "d" ],
     "comments" : { },
-    "n_iterations" : 486,
+    "n_iterations" : 2,
     "rewiners" : [ ]
   },
   "1" : {
     "id" : 1,
-    "author" : "pippo",
-    "title" : "sdfdkfjndknfjd",
-    "content" : "dgfknmgkfngfjkng",
-    "upvote" : [ "a" ],
-    "downvote" : [ ],
+    "author" : "a",
+    "title" : "vacanza al mare",
+    "content" : "vacanza bellissima",
+    "upvote" : [ "c" ],
+    "downvote" : [ "salvo" ],
     "comments" : {
-      "a" : [ "ciaooooooooooo" ]
+      "c" : [ "top!", "incredibile!" ],
+      "salvo" : [ "preferisco la montagna" ]
     },
-    "n_iterations" : 966,
+    "n_iterations" : 2,
     "rewiners" : [ ]
   },
   "2" : {
     "id" : 2,
-    "author" : "pippo",
-    "title" : "dofmkkdjfgk",
-    "content" : "dfjdkiffjd",
+    "author" : "salvo",
+    "title" : "vacanza in montagna",
+    "content" : "c'era molta neve!",
+    "upvote" : [ "c" ],
+    "downvote" : [ ],
+    "comments" : {
+      "c" : [ "bello!" ]
+    },
+    "n_iterations" : 5,
+    "rewiners" : [ ]
+  },
+  "3" : {
+    "id" : 3,
+    "author" : "c",
+    "title" : "titolooo",
+    "content" : "contenutoooooooo",
     "upvote" : [ ],
     "downvote" : [ ],
     "comments" : { },
-    "n_iterations" : 967,
+    "n_iterations" : 8,
+    "rewiners" : [ ]
+  },
+  "4" : {
+    "id" : 4,
+    "author" : "c",
+    "title" : "abcd",
+    "content" : "efg",
+    "upvote" : [ ],
+    "downvote" : [ ],
+    "comments" : { },
+    "n_iterations" : 10,
     "rewiners" : [ ]
   }
 }

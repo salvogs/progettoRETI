@@ -1,45 +1,31 @@
 package com.salvo.winsome.server;
-
-import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.HttpURLConnection;
-import java.net.ProxySelector;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * @author Salvatore Guastella
  */
 public class RequestHandler implements Runnable{
 
-    /*
-        riferimento al server per accedere ai suoi metodi
-     */
-    private WSServer server;
+    private final WSServer server; // necessario per accedere ai metodi offerti
 
-    private String request;
-    private Selector selector;
-    private SelectionKey key;
+    private final String request;
+    private final Selector selector;
+    private final SelectionKey key;
 
-    ObjectMapper mapper;
+    private final ObjectMapper mapper;
 
     /**
      * @param request la richiesta del client da gestire
      * @param selector il selector dove e' registrato il channel del client
-     * @param key selectable channel del client da registrare
-     *        per OP_WRITE quando e' pronta una risposta
-     * @throws IOException
+     * @param key chiave relativa al channel del client
      */
     public RequestHandler(WSServer server, String request, Selector selector, SelectionKey key) {
         this.server = server;
@@ -53,9 +39,9 @@ public class RequestHandler implements Runnable{
 
     }
 
-
+    @Override
     public void run() {
-        System.out.println(request);
+//        System.out.println(request);
         boolean badReq = false;
         ObjectNode response = null;
         try {
@@ -67,33 +53,23 @@ public class RequestHandler implements Runnable{
 
             switch (op.asText()) {
                 case "login": {
-
                     String username = parseNextTextField(req, "username");
                     if (username != null) {
-
                         String password = parseNextTextField(req, "password");
                         if (password != null) {
-
                             SocketChannel clientChannel = (SocketChannel) key.channel();
                             response = server.login(username, password, clientChannel.getRemoteAddress().hashCode());
-
                         }
                     }
-
                 }
 
                 break;
 
                 case "logout": {
-
                     String username = parseNextTextField(req, "username");
                     if (username != null) {
-
                         SocketChannel clientChannel = (SocketChannel) key.channel();
-
                         response = server.logout(username, clientChannel.getRemoteAddress().hashCode());
-
-
                     }
                 }
                 break;
@@ -101,13 +77,9 @@ public class RequestHandler implements Runnable{
                 case "follow": {
                     String username = parseNextTextField(req, "username");
                     if (username != null) {
-
                         String toFollow = parseNextTextField(req, "to-follow");
                         if (toFollow != null) {
-
                             response = server.followUser(username, toFollow);
-
-
                         }
                     }
                 }
@@ -116,13 +88,9 @@ public class RequestHandler implements Runnable{
                 case "unfollow": {
                     String username = parseNextTextField(req, "username");
                     if (username != null) {
-
                         String toUnfollow = parseNextTextField(req, "to-unfollow");
                         if (toUnfollow != null) {
-
                             response = server.unfollowUser(username, toUnfollow);
-
-
                         }
                     }
                 }
@@ -133,8 +101,6 @@ public class RequestHandler implements Runnable{
                     String username = parseNextTextField(req, "username");
                     if (username != null) {
                         response = server.listUsers(username);
-
-
                     }
                 }
                 break;
@@ -143,11 +109,10 @@ public class RequestHandler implements Runnable{
                     String username = parseNextTextField(req, "username");
                     if (username != null) {
                         response = server.listFollowing(username);
-
-
                     }
                 }
                 break;
+
                 case "create-post": {
                     String username = parseNextTextField(req, "username");
                     if (username != null) {
@@ -160,23 +125,17 @@ public class RequestHandler implements Runnable{
                             }
                         }
                     }
-
-
                 }
-
                 break;
 
                 case "delete-post": {
                     String username = parseNextTextField(req, "username");
                     if (username != null) {
-
                         int idPost = parseNextNumberField(req, "id-post");
-
                         if (idPost != -2)
                             response = server.deletePost(username, idPost);
                     }
                 }
-
                 break;
 
                 case "rewin-post": {
@@ -187,19 +146,16 @@ public class RequestHandler implements Runnable{
                             response = server.rewinPost(username, idPost);
                     }
                 }
-
                 break;
 
                 case "show-post": {
                     String username = parseNextTextField(req, "username");
                     if (username != null) {
-
                         int idPost = parseNextNumberField(req, "id-post");
                         if (idPost != -2)
                             response = server.showPost(username, idPost);
                     }
                 }
-
                 break;
 
                 case "show-feed": {
@@ -207,7 +163,6 @@ public class RequestHandler implements Runnable{
                     if (username != null) {
                         response = server.showFeed(username);
                     }
-
                 }
                 break;
 
@@ -232,7 +187,6 @@ public class RequestHandler implements Runnable{
 
                             }
                         }
-
                     }
                 }
 
@@ -246,12 +200,9 @@ public class RequestHandler implements Runnable{
                         if (idPost != -2) {
                             String comment = parseNextTextField(req, "comment");
                             if (comment != null) {
-
                                 response = server.commentPost(username, idPost, comment);
-
                             }
                         }
-
                     }
                 }
                 break;
@@ -286,12 +237,12 @@ public class RequestHandler implements Runnable{
             e.printStackTrace();
         }
 
-        if(badReq || response == null)
+        if(badReq || response == null) // se la richiesta non è valida
             registerForResponse("{\n  \"status-code\" : 400,\n  \"message\" : \"bad request\"\n}");
         else {
             try {
                 registerForResponse(mapper.writeValueAsString(response));
-            } catch (IOException e) {}
+            } catch (IOException e) {e.printStackTrace();}
         }
 
 
@@ -301,7 +252,7 @@ public class RequestHandler implements Runnable{
     /**
      * cambia l'interest set della key in OP_WRITE in modo tale che
      * il dispatcher mandi la risposta quando il channel e' pronto in scrittura
-     * @param response
+     * @param response risposta da mandare al client (formato json)
      */
     private void registerForResponse(String response) {
         ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES+response.length());
@@ -314,44 +265,7 @@ public class RequestHandler implements Runnable{
             key.interestOps(SelectionKey.OP_WRITE);
             selector.wakeup();
         }
-
-        // altrimenti il worker potrebbe mandare la risposta
-//        else {
-//            while (buffer.hasRemaining())
-//                ((SocketChannel) key.channel()).write(buffer);
-//        }
-
-
     }
-
-//    private void sendResponse(String response) throws IOException {
-//
-//        SocketChannel clientChannel = (SocketChannel) key.channel();
-//
-//
-//        ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES+response.length());
-//        buffer.putInt(response.length());
-//        buffer.put(ByteBuffer.wrap(response.getBytes()));
-//
-//        buffer.flip();
-//
-//        while(buffer.hasRemaining())
-//            clientChannel.write(buffer);
-//
-//        // creo il buffer che conterra' la lunghezza del messaggio
-//        ByteBuffer length = ByteBuffer.allocate(Integer.BYTES);
-//        // creo il buffer che conterra' il messaggio
-//        ByteBuffer message = ByteBuffer.allocate(1024);
-//
-//        ByteBuffer[] bba = {length, message};
-//        // imposto l'interestOps della key OP_READ
-//        // e aggiungo l'array di bytebuffer (bba) come attachment
-//        key.attach(bba);
-//        key.interestOps(SelectionKey.OP_READ);
-//        selector.wakeup();
-//
-//
-//    }
 
     private String parseNextTextField(JsonNode req, String fieldName) {
         JsonNode field = req.get(fieldName);

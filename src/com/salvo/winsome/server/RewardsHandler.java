@@ -11,9 +11,9 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class RewardsHandler implements Runnable{
 
-    private WSServer server;
-    private int rewardsPeriod;
-    private double authorPercentage;
+    private final WSServer server;
+    private final int rewardsPeriod;
+    private final double authorPercentage;
     private final InetAddress multicastAddress;
     private final int multicastPort;
     private DatagramSocket dsocket;
@@ -27,6 +27,9 @@ public class RewardsHandler implements Runnable{
 
     private int globalIterations;
 
+    /**
+     * @author Salvatore Guastella
+     */
     public RewardsHandler(WSServer server, double authorPercentage, int rewardsPeriod) {
         this.server = server;
         this.authorPercentage = authorPercentage;
@@ -63,20 +66,11 @@ public class RewardsHandler implements Runnable{
                 break;
             }
 
-
-//            Scanner s = new Scanner(System.in);
-//
-//            System.out.println(s.nextLine());
-//            System.out.println("SCATTATO TIMERRRRR");
         }
 
         // calcolo le ricompense per l'ultima volta
         computeRewards();
         dsocket.close();
-        return;
-
-
-
 
     }
 
@@ -162,7 +156,7 @@ public class RewardsHandler implements Runnable{
 //            System.out.println("rewarddd: "+reward);
 
             SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
-
+            // aggiorno portafoglio autore
             double authorReward = reward * authorPercentage;
             server.incrementWallet(p.getAuthor(),sdf.format(new Date()),authorReward);
 
@@ -174,22 +168,21 @@ public class RewardsHandler implements Runnable{
             if(n_comments > 0) curators.addAll(comments.get(idPost));
 
             double curatorReward = (reward - authorReward) / curators.size();
-
+            // aggiorno portafogli curatori
             for(String curator : curators)
                 server.incrementWallet(curator,sdf.format(new Date()),curatorReward);
 
 
             postsToCompute.remove(idPost);
-            upvotes.remove(idPost);
-            downvotes.remove(idPost);
-            comments.remove(idPost);
-
+//            upvotes.remove(idPost);
+//            downvotes.remove(idPost);
+//            comments.remove(idPost);
 
             postsComputed++;
 
         }
 
-        if(postsComputed > 0) {
+        if(postsComputed > 0) { // invio notifiche solo se è stato modificato almeno un wallet
 
             System.out.println("Calcolo ricompense effettuato");
 
@@ -197,7 +190,6 @@ public class RewardsHandler implements Runnable{
             // ricevuta solo dai client 'online' e con le notifiche attive
 
             try {
-
                 final byte[] msg = "Calcolo ricompense effettuato".getBytes();
                 DatagramPacket dpacket = new DatagramPacket(msg, msg.length, multicastAddress, multicastPort);
 

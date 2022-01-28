@@ -14,10 +14,9 @@ import java.util.concurrent.locks.Lock;
  */
 public class RMIServer extends RemoteServer implements RMIServerInterface {
 
-    private ConcurrentHashMap<String,WSUser> registeredUsers;
-
-    private ConcurrentHashMap<String, ArrayList<String>> allTags;
-    private Lock allTagsWriteLock;
+    private final ConcurrentHashMap<String,WSUser> registeredUsers;
+    private final ConcurrentHashMap<String, ArrayList<String>> allTags;
+    private final Lock allTagsWriteLock;
 
     public RMIServer(ConcurrentHashMap<String,WSUser> registeredUsers,
                      ConcurrentHashMap<String, ArrayList<String>> allTags,
@@ -25,7 +24,7 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
 
         this.registeredUsers = registeredUsers;
         this.allTags = allTags;
-        this.allTagsWriteLock = allTagsWriteLock;
+        this.allTagsWriteLock = allTagsWriteLock; // listUsers potrebbe accedere in contemporanea
     }
 
 
@@ -84,24 +83,5 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
 
         return 0;
     }
-
-
-
-//    @Override
-//    public int unregisterForCallback(String username) throws RemoteException {
-//
-//        WSUser user = registeredUser.get(username);
-//
-//        if(user == null)
-//            return -1;
-//
-//        user.setRemoteClient(null);
-//        user.setLogged(false);
-//
-//        return 0;
-//    }
-
-//    public HashMap<String,String[]> getFollowers()
-
 
 }

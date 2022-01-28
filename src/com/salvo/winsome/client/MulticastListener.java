@@ -9,10 +9,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class MulticastListener implements Runnable{
 
-    private InetAddress multicastAddress;
-    private int multicastPort;
+    private final InetAddress multicastAddress;
+    private final int multicastPort;
     private MulticastSocket msocket;
-    private volatile AtomicBoolean doNotDisturb;
+    private final AtomicBoolean doNotDisturb;
 
     public MulticastListener(String multicastAddress, int multicastPort, AtomicBoolean doNotDisturb) throws UnknownHostException {
         this.multicastAddress = InetAddress.getByName(multicastAddress);
@@ -43,16 +43,14 @@ public class MulticastListener implements Runnable{
 
         } catch (SocketException e) {
             System.out.println("Thread multicastListener terminato");
-            return;
         } catch (IOException e) {
             e.printStackTrace();
-            return;
         }
 
 
     }
 
-
+    // scatenerà una Exception
     public void stop() {
         if(msocket != null) {
             try {

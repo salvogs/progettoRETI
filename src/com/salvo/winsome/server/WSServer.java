@@ -45,32 +45,38 @@ public class WSServer implements Runnable{
 
 
     /**
-     * hash table degli utenti registrati
+     * hash table degli utenti registrati a winsome
      */
-
     private ConcurrentHashMap<String, WSUser> registeredUsers;
 
+    /**
+     * hash table contenente le corrispondenze tag -> utenti registrati con quel tag
+     */
     private ConcurrentHashMap<String, ArrayList<String>> allTags;
 
     ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
     Lock allTagsReadLock = readWriteLock.readLock();
     Lock allTagsWriteLock = readWriteLock.writeLock();
 
-    private RMIServer remoteServer;
+    /**
+     * hash table di tutti i post di winsome
+     */
+    @Getter private ConcurrentHashMap<Integer, WSPost> posts;
 
-    private ConcurrentHashMap<Integer,String> hashUser; // corrispondenza hash username
+    private final RMIServer remoteServer;
 
-    int nWorkers;
+    private final ConcurrentHashMap<Integer,String> hashUser; // corrispondenza hash username
+
+    private final int nWorkers;
 
     private ThreadPoolExecutor pool;
 
     private static final int MSG_BUFFER_SIZE = 1024;
 
 
-    @Getter private ConcurrentHashMap<Integer, WSPost> posts;
 
 
-    ObjectMapper mapper;
+    private final ObjectMapper mapper;
 
 
     private HashMap<Integer, HashSet<String>> newUpvotes;
@@ -90,7 +96,7 @@ public class WSServer implements Runnable{
 
 
     Selector selector = null; // per permettere il multiplexing dei channel
-    boolean exit = false;
+    boolean exit = false; // per la terminazione
 
 
     public WSServer(int nWorkers,int tcpPort, int multicastPort, String multicastAddress, int regPort, String regServiceName,
@@ -165,7 +171,10 @@ public class WSServer implements Runnable{
 
     }
 
-
+    /**
+     * ripristina un'eventuale backup dal file system
+     * @return 0 se il backup è andato a buon fine, -1 altrimenti
+     */
     private int restoreBackup() {
 
         if(backupDir.isDirectory() && usersBackup.isFile() && postsBackup.isFile()
@@ -202,21 +211,6 @@ public class WSServer implements Runnable{
 
         return -1;
 
-    }
-
-
-    public void incrementWallet(String username, String timestamp, double value) {
-        WSUser user = registeredUsers.get(username);
-        if(user != null) {
-            user.lockWrite();
-            user.incrementWallet(value);
-            user.addTranstaction(new WSTransaction(idTransactionsCounter++,timestamp,value));
-            user.unlockWrite();
-        }
-    }
-
-    public void setRewardsIteration(int iteration) {
-        rewardsIteration = iteration;
     }
 
 
@@ -350,7 +344,6 @@ public class WSServer implements Runnable{
         selector.wakeup();
     }
 
-
     public void registerRead(Selector selector, SocketChannel clientChannel) throws IOException {
 
         // rendo il canale non bloccante
@@ -434,23 +427,17 @@ public class WSServer implements Runnable{
         }
 
 
-
-//        // creo il buffer che conterra' la lunghezza del messaggio
-//        ByteBuffer length = ByteBuffer.allocate(Integer.BYTES);
-//        // creo il buffer che conterra' il messaggio
-//        ByteBuffer message = ByteBuffer.allocate(1024);
-//
-//        ByteBuffer[] bba = {length, message};
-//        // imposto l'interestOps della key OP_READ
-//        // e aggiungo l'array di bytebuffer (bba) come attachment
-//        key.attach(bba);
-//        key.interestOps(SelectionKey.OP_READ);
-//        selector.wakeup();
-
-
     }
 
-
+    /**
+     *
+     * @param username
+     * @param sessionId per nuova entry su hashUser
+     * @return json ok, json con errore se utente non esistente o
+     *      * utente già loggato da altro client o password errata
+     * @throws IllegalArgumentException
+     *
+     */
     public ObjectNode login(String username, String password, int sessionId) throws IllegalArgumentException {
 
         if (password == null || sessionId < 0)
@@ -531,13 +518,16 @@ public class WSServer implements Runnable{
 
     }
 
+
     /**
      *
      * @param username
      * @param sessionId per evitare che qualcuno tramite una
      *                 connessione diversa possa disconnettere l'utente
-     * @return
+     * @return json ok, json con errore se utente non esistente o
+     *      * utente non loggato o sessionId non corrisponde al client che ha fatto il login
      * @throws IllegalArgumentException
+     *
      */
     public ObjectNode logout(String username, int sessionId) throws IllegalArgumentException {
 
@@ -575,7 +565,11 @@ public class WSServer implements Runnable{
 
     }
 
-
+    /**@return lista utenti con almeno un tag in comune con username,
+     * json con errore se utente non esistente o
+     * utente non loggato
+     * @throws IllegalArgumentException
+     */
     public ObjectNode listUsers(String username) throws IllegalArgumentException {
 
         ObjectNode response = mapper.createObjectNode();
@@ -635,6 +629,13 @@ public class WSServer implements Runnable{
 
     }
 
+
+
+
+    /**@return lista dei followed, json con errore se utente non esistente o
+     * utente non loggato
+     * @throws IllegalArgumentException
+     */
     public ObjectNode listFollowing(String username) throws IllegalArgumentException{
 
         ObjectNode response = mapper.createObjectNode();
@@ -686,7 +687,11 @@ public class WSServer implements Runnable{
 
     }
 
-
+    /** per seguire un utente. invia una notifica tramite RMI callback se utente loggato
+     * @return json ok, json con errore se utenti non esistenti o
+     * utente non loggato o username == toFollow
+     * @throws IllegalArgumentException
+     */
     public ObjectNode followUser(String username, String toFollow) throws IllegalArgumentException {
 
         ObjectNode response = mapper.createObjectNode();
@@ -698,7 +703,7 @@ public class WSServer implements Runnable{
             if (user != null && userToFollow != null) {
 
                 if (checkStatus(user,response) == 0) {
-                    //user.lockWrite();//non serve perchè solo l'utente loggato può accedere alla lista dei followers
+                    //user.lockWrite();//non serve perchè solo l'utente loggato può accedere alla lista dei followed
                     boolean newFollowed = user.addFollowed(toFollow);
                     //user.unlockWrite();
                     if (newFollowed == true) {
@@ -735,6 +740,12 @@ public class WSServer implements Runnable{
 
     }
 
+
+    /** per smettere di seguire un utente. invia una notifica tramite RMI callback se utente loggato
+     * @return json ok, json con errore se utenti non esistenti o
+     * utente non loggato o username == toUnfollow
+     * @throws IllegalArgumentException
+     */
     public ObjectNode unfollowUser(String username, String toUnfollow) throws IllegalArgumentException{
 
         ObjectNode response = mapper.createObjectNode();
@@ -746,7 +757,7 @@ public class WSServer implements Runnable{
             if (user != null && userToUnfollow != null) {
                 if (checkStatus(user,response) == 0) {
 
-                    //user.lockWrite(); //non serve perchè solo l'utente loggato può accedere alla lista dei followers
+                    //user.lockWrite(); //non serve perchè solo l'utente loggato può accedere alla lista dei followed
                     boolean wasFollowed = user.removeFollowed(toUnfollow);
                     //user.unlockWrite();
                     if (wasFollowed == true) {
@@ -781,6 +792,12 @@ public class WSServer implements Runnable{
 
     }
 
+
+    /** crea un nuovo post sul blog di username
+     * @return json ok se creazione avvenuta con successo, json con errore se utente non esistente o
+     * utente non loggato
+     * @throws IllegalArgumentException
+     */
     public ObjectNode createPost(String username, String title, String content) throws IllegalArgumentException {
 
         if(title == null || content == null)
@@ -812,6 +829,14 @@ public class WSServer implements Runnable{
 
     }
 
+
+
+
+    /** Rimuove il post dal blog
+     * @return json ok se rimozione avvenuta con successo, json con errore se utente/post non esistente o
+     * utente non loggato o autore post != username
+     * @throws IllegalArgumentException
+     */
     public ObjectNode deletePost(String username, int idPost) throws IllegalArgumentException{
 
         ObjectNode response = mapper.createObjectNode();
@@ -863,7 +888,11 @@ public class WSServer implements Runnable{
         return response;
     }
 
-
+    /**
+     * @return lista dei post nel feed, con id autore e titolo, json con errore se utente non esistente o
+     *      * utente non loggato
+     * @throws IllegalArgumentException
+     */
     public ObjectNode showFeed(String username) throws IllegalArgumentException{
 
         ObjectNode response = mapper.createObjectNode();
@@ -920,6 +949,11 @@ public class WSServer implements Runnable{
 
     }
 
+    /**
+     * @return lista dei post nel blog, con id autore e titolo, json con errore se utente non esistente o
+     *      * utente non loggato
+     * @throws IllegalArgumentException
+     */
     public ObjectNode viewBlog(String username) throws IllegalArgumentException{
 
         ObjectNode response = mapper.createObjectNode();
@@ -967,6 +1001,15 @@ public class WSServer implements Runnable{
         return response;
     }
 
+
+
+    /**
+     * aggiunge un post al blog di username
+     * @return json ok, json con errore se utente/post non esistente o
+     *      * utente non loggato o post non nel feed/blog
+     *      * oppure post cancellato
+     * @throws IllegalArgumentException
+     */
     public ObjectNode rewinPost(String username, int idPost) throws IllegalArgumentException{
 
         ObjectNode response = mapper.createObjectNode();
@@ -1001,6 +1044,13 @@ public class WSServer implements Runnable{
         return response;
     }
 
+    /**
+     * aggiunge un voto positivo o negativo a un post
+     * @return json ok, json con errore se utente/post non esistente o
+     *      * utente non loggato o post non nel feed/blog
+     *      * oppure post cancellato
+     * @throws IllegalArgumentException
+     */
     public ObjectNode ratePost(String username, int idPost, int vote) throws IllegalArgumentException{
 
         ObjectNode response = mapper.createObjectNode();
@@ -1050,6 +1100,12 @@ public class WSServer implements Runnable{
 
     }
 
+    /** aggiunge un commento a un post nel feed di username
+     * @param username
+     * @return  json ok, json con errore se utente/post non esistente o
+     * utente non loggato o post non nel feed/blog
+     * oppure post cancellato
+     */
     public ObjectNode commentPost(String username, int idPost, String comment) throws IllegalArgumentException{
 
         if(comment == null)
@@ -1089,7 +1145,11 @@ public class WSServer implements Runnable{
 
     }
 
-
+    /**
+     * @return jsonNode rappresentante un post con titolo, contenuto, voti ecc...,
+     * o json con errore se utente/post non esistente o utente non loggato o post non nel feed/blog
+     * oppure post cancellato
+     */
     public ObjectNode showPost(String username, int idPost) throws IllegalArgumentException{
 
         ObjectNode response = mapper.createObjectNode();
@@ -1137,7 +1197,11 @@ public class WSServer implements Runnable{
 
     }
 
-
+    /**
+     * @param username
+     * @return valore del wallet e la lista delle transazioni o json con errore se
+     * utente non esistente o non loggato
+     */
     public ObjectNode getWallet(String username) throws IllegalArgumentException{
 
         ObjectNode response = mapper.createObjectNode();
@@ -1174,6 +1238,11 @@ public class WSServer implements Runnable{
         return response;
     }
 
+    /**
+     * @param username
+     * @return valore del wallet in bitcoin o json con errore se
+     * utente non esistente o non loggato
+     */
     public ObjectNode getWalletInBitcoin(String username) {
 
         ObjectNode response = mapper.createObjectNode();
@@ -1198,7 +1267,11 @@ public class WSServer implements Runnable{
         return response;
     }
 
-
+    /**
+     * contatta il servizio esterno random.org per ottenere un rate di cambio wincoin->bitcoin
+     * se il servizio non è raggiungibile utilizza l'ultimo rate valido
+     * @return
+     */
     private double getExchangeRate() {
 
         double rate;
@@ -1210,8 +1283,6 @@ public class WSServer implements Runnable{
 
             if(urlCon.getResponseCode() == HttpURLConnection.HTTP_OK) {
                 BufferedReader in = new BufferedReader(new InputStreamReader(urlCon.getInputStream()));
-
-//                StringBuilder s = new StringBuilder();
 
                 rate = Double.parseDouble(in.readLine());
                 in.close();
@@ -1231,8 +1302,6 @@ public class WSServer implements Runnable{
 
     /**
      * controlla se un post appartiene al feed di un utente
-     * @param user
-     * @param post
      * @return true se il post appartiene al feed dell'utente,
      *          false altrimenti
      */
@@ -1255,10 +1324,7 @@ public class WSServer implements Runnable{
     }
 
     /**
-     *
-     * @param username
-     * @param post
-     * @return true se il post e' di @username, false altrimenti
+     * @return true se il post e' di username, false altrimenti
      * @throws IOException
      */
     private boolean checkAuthor(String username, WSPost post, ObjectNode response) {
@@ -1271,7 +1337,10 @@ public class WSServer implements Runnable{
         return false;
 
     }
-
+    /**
+     * @return true se il post e' stato già votato da username, false altrimenti
+     * @throws IOException
+     */
     private boolean alreadyVoted(String username, WSPost post, ObjectNode response) {
         if(post.voted(username) == true) {
             response.put("status-code",HttpURLConnection.HTTP_FORBIDDEN);
@@ -1283,7 +1352,12 @@ public class WSServer implements Runnable{
     }
 
 
-
+    /**
+     * metodo chiamato quando un client chiude la connessione
+     * effettua il logout se c'è una corrispondenza tra
+     * channel.getRemoteAddress().hashCode() su hashUser
+     * @param channel
+     */
     public void disconnetionHandler(SocketChannel channel) {
         try {
             System.err.println("Disconnesso client :"+channel.getRemoteAddress());
@@ -1303,7 +1377,11 @@ public class WSServer implements Runnable{
         }
     }
 
-
+    /**
+     * controlla se l'utente esiste
+     * @return un oggetto WSUser se esiste, null altrimenti
+     * @throws IllegalArgumentException se username == null
+     */
     private WSUser checkUser(String username,ObjectNode response) throws IllegalArgumentException{
 
         if(username == null)
@@ -1321,7 +1399,11 @@ public class WSServer implements Runnable{
 
     }
 
-
+    /**
+     * controlla se l'utente è loggato
+     * @return 0 se è loggato, -1 altrimenti
+     * @throws IllegalArgumentException
+     */
     private int checkStatus(WSUser user,ObjectNode response) {
         if(user.alreadyLogged())
             return 0;
@@ -1331,7 +1413,13 @@ public class WSServer implements Runnable{
         return -1;
     }
 
-
+    /**
+     * controlla se il post esiste
+     * @param id id del post
+     * @param response
+     * @return un oggetto WSPost se esiste, null altrimenti
+     * @throws IllegalArgumentException
+     */
     private WSPost checkPost(int id, ObjectNode response) throws IllegalArgumentException{
 
         if(id < 0)
@@ -1349,23 +1437,24 @@ public class WSServer implements Runnable{
 
     }
 
-
+    /**
+     * controlla se il flag deleted del post è == true.
+     * Utile per non far avanzare un'operazione che ha un riferimento
+     * a un post eliminato
+     * @param p oggetto WSPost
+     * @param response
+     * @return true se il post è stato cancellato, false altrimenti
+     */
     private boolean checkDeleted(WSPost p, ObjectNode response) {
         if(p.isDeleted()){
             response.put("status-code",HttpURLConnection.HTTP_NOT_FOUND);
             response.put("message", "post "+p.getId()+" non trovato");
+            return true;
         }
 
         return false;
     }
 
-//    private String jsonResponseToString() throws IOException {
-//
-//        generator.flush();
-//        String response = responseStream.toString().trim();
-//        responseStream.reset();
-//        return response;
-//    }
 
     public void checkFiles() throws IOException{
 
@@ -1387,6 +1476,10 @@ public class WSServer implements Runnable{
 
     }
 
+    /**
+     * utilizzata dal BackupHandler per scrivere un backup sul file system
+     * @throws IOException
+     */
     public void performBackup() throws IOException {
 
         mapper.writeValue(usersBackup, registeredUsers);
@@ -1406,10 +1499,11 @@ public class WSServer implements Runnable{
 
     }
 
-
-    public int getRewardsIteration() {
-        return rewardsIteration;
-    }
+    /**
+     *
+     * metodi utilizzati dal RewardsHandler per recuperare in maniera thread safe
+     * i nuovi upvotes,downvotes e comments.
+     */
 
     public HashMap<Integer, HashSet<String>> replaceAndGetNewUpvotes() {
         synchronized (newUpvotes) {
@@ -1433,5 +1527,29 @@ public class WSServer implements Runnable{
             newComments = new HashMap<>();
             return tmpComments;
         }
+    }
+
+    /**
+     * utilizzata dal RewardsHandler per aggiungere una transazione al wallet di un utente
+     * e aggiornare il suo valore
+     * @param username
+     * @param timestamp datetime in formato stringa
+     * @param value valore transazione
+     */
+    public void incrementWallet(String username, String timestamp, double value) {
+        WSUser user = registeredUsers.get(username);
+        if(user != null) {
+            user.lockWrite();
+            user.incrementWallet(value);
+            user.addTranstaction(new WSTransaction(idTransactionsCounter++,timestamp,value));
+            user.unlockWrite();
+        }
+    }
+    public int getRewardsIteration() {
+        return rewardsIteration;
+    }
+
+    public void setRewardsIteration(int iteration) {
+        rewardsIteration = iteration;
     }
 }
