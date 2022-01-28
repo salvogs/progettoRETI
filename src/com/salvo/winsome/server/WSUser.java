@@ -86,12 +86,17 @@ public @Getter @Setter class WSUser implements Serializable {
         wallet += reward;
     }
 
-    // notifica quando l'utente ha un nuovo follower
-    public void notifyNewFollow(String user, String[] tags) throws RemoteException {
-        if(remoteClient != null) remoteClient.newFollow(user,tags);
+
+    public synchronized void setRemoteClient(RMIClientInterface remoteClient) {
+        this.remoteClient = remoteClient;
     }
 
-    public void notifyNewUnfollow(String user) throws RemoteException {
+    // notifica quando l'utente ha un nuovo follower
+    public synchronized void notifyNewFollow(String user, String[] tags) throws RemoteException {
+        if(remoteClient != null) remoteClient.newFollow(user,tags);
+    }
+    // l'utente potrebbe fare il logout
+    public synchronized void notifyNewUnfollow(String user) throws RemoteException {
         if(remoteClient != null) remoteClient.newUnfollow(user);
     }
 

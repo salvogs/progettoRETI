@@ -26,12 +26,12 @@ public class RMIClient extends RemoteServer implements RMIClientInterface {
 
     @Override
     public void newFollow(String user,String[] tags) throws RemoteException {
-        followers.put(user,tags);
+        synchronized (followers) { followers.put(user,tags); }
         if(doNotDisturb.get() == false) System.out.println(user+" ti segue");
     }
     @Override
     public void newUnfollow(String user) throws RemoteException {
-        followers.remove(user);
+        synchronized (followers) { followers.remove(user); }
         if(doNotDisturb.get() == false) System.out.println(user+" ha smesso di seguirti");
     }
 

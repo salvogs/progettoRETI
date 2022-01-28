@@ -3,36 +3,68 @@
     "username" : "a",
     "password" : "a",
     "tags" : [ ],
-    "followers" : [ "b" ],
-    "followed" : [ "b" ],
+    "followers" : [ "pippo" ],
+    "followed" : [ "u1", "u2", "pippo" ],
     "blog" : [ 0 ],
-    "wallet" : 1.3862943611198906,
-    "transactions" : [ {
-      "id" : 0,
-      "timestamp" : "21-01-2022 19:16:02",
-      "value" : 0.9704060527839233
-    }, {
-      "id" : 3,
-      "timestamp" : "22-01-2022 20:01:47",
-      "value" : 0.41588830833596724
-    } ]
-  },
-  "b" : {
-    "username" : "b",
-    "password" : "b",
-    "tags" : [ ],
-    "followers" : [ "a" ],
-    "followed" : [ "a" ],
-    "blog" : [ 1 ],
-    "wallet" : 1.3862943611198906,
+    "wallet" : 0.05941261547656673,
     "transactions" : [ {
       "id" : 1,
-      "timestamp" : "21-01-2022 19:16:04",
-      "value" : 0.41588830833596724
-    }, {
-      "id" : 2,
-      "timestamp" : "22-01-2022 20:01:47",
-      "value" : 0.9704060527839233
+      "timestamp" : "28-01-2022 16:39:57",
+      "value" : 0.05941261547656673
     } ]
+  },
+  "s" : {
+    "username" : "s",
+    "password" : "s",
+    "tags" : [ "sidjid", "djnd" ],
+    "followers" : [ ],
+    "followed" : [ ],
+    "blog" : [ ],
+    "wallet" : 0.0,
+    "transactions" : [ ]
+  },
+  "u1" : {
+    "username" : "u1",
+    "password" : "1",
+    "tags" : [ "t1", "t2" ],
+    "followers" : [ "a" ],
+    "followed" : [ ],
+    "blog" : [ ],
+    "wallet" : 0.0,
+    "transactions" : [ ]
+  },
+  "u2" : {
+    "username" : "u2",
+    "password" : "2",
+    "tags" : [ "t2" ],
+    "followers" : [ "a", "u3" ],
+    "followed" : [ "u3" ],
+    "blog" : [ ],
+    "wallet" : 0.0,
+    "transactions" : [ ]
+  },
+  "pippo" : {
+    "username" : "pippo",
+    "password" : "pippo",
+    "tags" : [ "sport" ],
+    "followers" : [ "a" ],
+    "followed" : [ "a" ],
+    "blog" : [ 1, 2 ],
+    "wallet" : 0.13862943611198905,
+    "transactions" : [ {
+      "id" : 0,
+      "timestamp" : "28-01-2022 16:39:57",
+      "value" : 0.13862943611198905
+    } ]
+  },
+  "u3" : {
+    "username" : "u3",
+    "password" : "3",
+    "tags" : [ "t1" ],
+    "followers" : [ "u2" ],
+    "followed" : [ "u2" ],
+    "blog" : [ ],
+    "wallet" : 0.0,
+    "transactions" : [ ]
   }
 }

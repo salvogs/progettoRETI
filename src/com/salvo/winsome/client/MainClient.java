@@ -41,15 +41,6 @@ public class MainClient {
         client = new WSClient(serverAddress,tcpPort,registryAddr,registryPort,regServiceName);
 
 
-//        System.out.println(
-//                " _    _ _____ _   _  _____  ________  ___ _____ \n" +
-//                "| |  | |_   _| \\ | |/  ___||  _  |  \\/  ||  ___|\n" +
-//                "| |  | | | | |  \\| |\\ `--. | | | | .  . || |__  \n" +
-//                "| |/\\| | | | | . ` | `--. \\| | | | |\\/| ||  __| \n" +
-//                "\\  /\\  /_| |_| |\\  |/\\__/ /\\ \\_/ / |  | || |___ \n" +
-//                " \\/  \\/ \\___/\\_| \\_/\\____/  \\___/\\_|  |_/\\____/");
-
-
         try( BufferedReader br = new BufferedReader(new InputStreamReader(System.in))) {
 
 
@@ -66,6 +57,26 @@ public class MainClient {
             e.printStackTrace();
             System.exit(-1);
         }
+
+//try{
+//            System.out.println("Benvenuto in winsome:");
+//            System.out.println("Digita 'help' per visualizzare la lista dei comandi, 'stop' per terminare l'esecuzione");
+//
+//            String input = String.join(" ",args);
+//            StringTokenizer st = new StringTokenizer(input," ");
+//            String token = st.nextToken();
+//            token = st.nextToken("+");
+//            while (token != null) {
+//                System.out.println(token);
+//
+//                if(decodeAndRunCommand(token.trim()) == -2) System.exit(0);
+//                token = st.nextToken("+");
+//            }
+//
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//            System.exit(-1);
+//        }
 
     }
 
@@ -185,7 +196,7 @@ public class MainClient {
                         break;
 
                         case "show" : {
-                            if(st.nextToken().equals("post")) {
+                            if(!st.nextToken().equals("post")) {
                                 inputError();
                                 return -1;
                             }

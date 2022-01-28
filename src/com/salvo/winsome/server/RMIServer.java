@@ -31,13 +31,11 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
 
 
     @Override
-    public synchronized int registerUser(String username, String password, String[] tags) throws RemoteException {
+    public int registerUser(String username, String password, String[] tags) throws RemoteException {
 
-        if(username == null || registeredUsers.containsKey(username))
+        if(username == null || password == null || password.equals(""))
             return -1;
 
-        if(password == null || password.equals(""))
-            return -2;
 
         // creazione nuovo utente
 
@@ -45,7 +43,7 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
 
         // aggiunge il nuovo utente nella HashMap
 
-        registeredUsers.put(username,newUser);
+        if(registeredUsers.putIfAbsent(username,newUser) != null) return -2; // username già utilizzato
 
         System.out.println("Registrato nuovo utente: \n username: "+username+"\n password: "+password+"\nlista tag: ");
 
@@ -78,13 +76,11 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
     public int registerForCallback(RMIClientInterface client,String username) throws RemoteException {
 
         WSUser user = registeredUsers.get(username);
-
         if(user == null)
             return -1;
-
         user.setRemoteClient(client);
 
-        System.out.println("registrata callback "+username);
+        System.out.println("Registrato stub "+username);
 
         return 0;
     }

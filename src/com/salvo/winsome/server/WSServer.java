@@ -60,7 +60,7 @@ public class WSServer implements Runnable{
 
     private ConcurrentHashMap<Integer,String> hashUser; // corrispondenza hash username
 
-    int N_THREAD = 10; // todo config
+    int nWorkers;
 
     private ThreadPoolExecutor pool;
 
@@ -93,9 +93,10 @@ public class WSServer implements Runnable{
     boolean exit = false;
 
 
-    public WSServer(int tcpPort, int multicastPort, String multicastAddress, int regPort, String regServiceName,
+    public WSServer(int nWorkers,int tcpPort, int multicastPort, String multicastAddress, int regPort, String regServiceName,
                     double authorPercentage, int rewardsPeriod, int backupPeriod) {
 
+        this.nWorkers = nWorkers;
         this.tcpPort = tcpPort;
 
         try {
@@ -111,7 +112,7 @@ public class WSServer implements Runnable{
         this.regPort = regPort;
         this.regServiceName = regServiceName;
 
-        if(authorPercentage <= 0 || authorPercentage >= 1){ // todo relazione
+        if(authorPercentage <= 0 || authorPercentage >= 1){
             System.err.println ("percentuale ricompense non valido");
             System.exit(-1);
         }
@@ -149,7 +150,7 @@ public class WSServer implements Runnable{
             this.idPostCounter = new AtomicInteger();
             this.rewardsIteration = 0;
             this.idTransactionsCounter = 0;
-            this.lastExchangeRate = 0;
+            this.lastExchangeRate = 0.25;
         } else System.out.println("Backup ripristinato");
 
         this.remoteServer = new RMIServer(registeredUsers,allTags,allTagsWriteLock);
@@ -222,7 +223,7 @@ public class WSServer implements Runnable{
     public void run() {
 
         // creo un pool di thread che gestiranno le richieste dei client
-        this.pool = (ThreadPoolExecutor) Executors.newFixedThreadPool(N_THREAD);
+        this.pool = (ThreadPoolExecutor) Executors.newFixedThreadPool(nWorkers);
 
         // creo e avvio thread per la gestione del backup
         Thread backupThread = new Thread(new BackupHandler(this,backupPeriod));
@@ -428,7 +429,7 @@ public class WSServer implements Runnable{
         clientChannel.write(buffer);
 
         if (!buffer.hasRemaining()) {
-            buffer.clear();
+//            buffer.clear();
             this.registerRead(selector, clientChannel);
         }
 
@@ -711,7 +712,7 @@ public class WSServer implements Runnable{
                             userToFollow.notifyNewFollow(username, user.getTags());
                         } catch (RemoteException e) {
                             System.err.println("Impossibile notificare il client");
-                            e.printStackTrace();
+//                            e.printStackTrace();
                         }
 
                     } else {
@@ -759,7 +760,7 @@ public class WSServer implements Runnable{
                             userToUnfollow.notifyNewUnfollow(username);
                         } catch (RemoteException e) {
                             System.err.println("Impossibile notificare il client");
-                            e.printStackTrace();
+//                            e.printStackTrace();
                         }
                     } else {
                         // se user non segue quell'utente non ritorno errori
@@ -1406,62 +1407,6 @@ public class WSServer implements Runnable{
     }
 
 
-    public void go() { // todo remove
-
-        registeredUsers.put("u1", new WSUser("u1", "a", null));
-        registeredUsers.put("u2", new WSUser("u2", "", null));
-        registeredUsers.put("u3", new WSUser("u3", "", null));
-        registeredUsers.put("u4", new WSUser("u4", "", null));
-        registeredUsers.put("u5", new WSUser("u5", "", null));
-        registeredUsers.put("u6", new WSUser("u6", "", null));
-
-        // Add some relationships between users
-
-            login("u1", "", 1);
-            login("u2", "", 2);
-            login("u3", "", 3);
-            login("u4", "", 4);
-            login("u5", "", 5);
-            login("u6", "", 6);
-
-
-            followUser("u2", "u1");
-            followUser("u3", "u1");
-            followUser("u4", "u1");
-            followUser("u5", "u1");
-            followUser("u6", "u1");
-
-            createPost("u1", "post bello", "sugoooo");
-
-
-
-            ratePost("u2", 0, 1);
-            ratePost("u3", 0, 1);
-            ratePost("u4", 0, 1);
-            ratePost("u5", 0, -1);
-//            ratePost("u6", 0, -1);
-
-            commentPost("u2", 0, "commento1");
-            commentPost("u3", 0, "commento1");
-            for(int i =0; i < 3; i++)
-                commentPost("u4", 0, "commento1");
-
-//            commentPost("u4", 0, "commento2");
-//            commentPost("u4", 0, "commento3");
-//            commentPost("u5", 0, "commento1");
-//            commentPost("u5", 0, "commento2");
-//            commentPost("u5", 0, "commento3");
-//            commentPost("u5", 0, "commento4");
-//            commentPost("u5", 0, "commento5");
-//            commentPost("u6", 0, "commento1");
-//            commentPost("u6", 0, "commento2");
-
-
-
-
-
-    }
-
     public int getRewardsIteration() {
         return rewardsIteration;
     }
@@ -1472,7 +1417,6 @@ public class WSServer implements Runnable{
             newUpvotes = new HashMap<>();
             return tmpUpvotes;
         }
-
     }
 
     public HashMap<Integer, HashSet<String>> replaceAndGetNewDownvotes() {

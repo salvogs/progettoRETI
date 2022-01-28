@@ -16,14 +16,28 @@ public class MainServer {
     public static void main(String[] args) {
 
 
-        if(args.length != 1) {
-            System.err.println("usage: java MainServer <config path>");
+        if(args.length < 1 ) {
+            System.err.println("usage: java MainServer <config path> [n workers]");
             System.exit(-1);
         }
 
         HashMap<String,String> result = ConfigParser.parseConfigFile(args[0]);
 
         System.out.println(result);
+
+        int nWorkers = 10;
+
+        if(args.length >= 2) {
+            try {
+                int n = Integer.parseInt(args[1]);
+                if (n > 0) nWorkers = n;
+            } catch (NumberFormatException e) {
+                System.err.println("usage: java MainServer <config path> [n worker]");
+                System.exit(-1);
+            }
+        }
+
+        System.out.println("n workers: "+nWorkers);
 
         System.out.println("Avvio server...");
 
@@ -36,7 +50,7 @@ public class MainServer {
         int rewardsPeriod = ConfigParser.getPositiveIntegerParameter(result,"rewardsperiod");
         int backupPeriod = ConfigParser.getPositiveIntegerParameter(result,"backupperiod");
 
-        WSServer server = new WSServer(tcpPort,multicastPort,multicastAddress,regPort,
+        WSServer server = new WSServer(nWorkers,tcpPort,multicastPort,multicastAddress,regPort,
                                        regServiceName,authorPercentage,rewardsPeriod,backupPeriod);
 
 

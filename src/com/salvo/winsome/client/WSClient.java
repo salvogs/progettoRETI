@@ -114,10 +114,9 @@ public class WSClient {
             if(ret == 0)
                 System.out.println("Utente '"+username+"' registrato con successo");
             else if(ret == -1)
-                System.err.println("Username '"+username+"' gia' utilizzato");
+                System.err.println("Username o Password non validi");
             else if(ret == -2)
-                System.err.println("Password non valida");
-
+                System.err.println("Username '"+username+"' già utilizzato");
 
 
         } catch (RemoteException e) {
@@ -275,13 +274,14 @@ public class WSClient {
             return;
         }
 
+        synchronized (followers) {
+            if(followers.isEmpty()){
+                System.out.println("Non hai ancora nessun follower");
+                return;
+            }
 
-        if(followers.isEmpty()){
-            System.out.println("Non hai ancora nessun follower");
-            return;
+            printUserAndTags(followers);
         }
-
-        printUserAndTags(followers);
     }
 
     public void listFollowing() throws IOException {

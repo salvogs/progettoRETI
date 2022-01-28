@@ -27,7 +27,7 @@ public class BackupHandler implements Runnable{
 
             while (!Thread.currentThread().isInterrupted()) {
                 try {
-                    Thread.sleep(this.backupPeriod); // odo config
+                    Thread.sleep(this.backupPeriod);
 
                     server.performBackup();
                     System.out.println("BACKUP EFFETTUATO");
