@@ -6,7 +6,7 @@
     "followers" : [ "c", "d", "salvo" ],
     "followed" : [ "c", "salvo" ],
     "blog" : [ 0, 1 ],
-    "wallet" : 0.46498623362562996,
+    "wallet" : 0.6729303877936136,
     "transactions" : [ {
       "id" : 0,
       "timestamp" : "28-01-2022 19:52:11",
@@ -19,6 +19,10 @@
       "id" : 6,
       "timestamp" : "28-01-2022 19:55:11",
       "value" : 0.06065037829899521
+    }, {
+      "id" : 9,
+      "timestamp" : "08-02-2022 11:35:25",
+      "value" : 0.20794415416798362
     } ]
   },
   "b" : {
@@ -27,9 +31,13 @@
     "tags" : [ "sport" ],
     "followers" : [ ],
     "followed" : [ ],
-    "blog" : [ ],
-    "wallet" : 0.0,
-    "transactions" : [ ]
+    "blog" : [ 5 ],
+    "wallet" : 0.48520302639196167,
+    "transactions" : [ {
+      "id" : 8,
+      "timestamp" : "08-02-2022 11:35:25",
+      "value" : 0.48520302639196167
+    } ]
   },
   "c" : {
     "username" : "c",

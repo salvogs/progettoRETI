@@ -643,10 +643,10 @@ public class WSClient {
 
         int statusCode = getStatusCode(res);
 
-        if (statusCode == HttpURLConnection.HTTP_OK) {
+        if (statusCode == HttpURLConnection.HTTP_OK)
             printJsonPost(res);
-        } else if (statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
-            System.err.println("Accesso non eseguito");
+        else
+            System.out.println(res.get("message").asText());
 
     }
 
@@ -670,10 +670,10 @@ public class WSClient {
 
         int statusCode = getStatusCode(res);
 
-        if (statusCode == HttpURLConnection.HTTP_OK) {
+        if (statusCode == HttpURLConnection.HTTP_OK)
             printJsonWallet(res);
-        } else if (statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
-            System.err.println("Accesso non eseguito");
+        else
+            System.out.println(res.get("message").asText());
 
     }
 
@@ -697,10 +697,10 @@ public class WSClient {
 
         int statusCode = getStatusCode(res);
 
-        if (statusCode == HttpURLConnection.HTTP_OK) {
+        if (statusCode == HttpURLConnection.HTTP_OK)
             System.out.println("Wallet BTC: "+res.get("wallet-btc").asText());
-        } else if (statusCode == HttpURLConnection.HTTP_UNAUTHORIZED)
-            System.err.println("Accesso non eseguito");
+        else
+            System.out.println(res.get("message").asText());
 
     }
 

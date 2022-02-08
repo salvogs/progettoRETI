@@ -58,5 +58,18 @@
     "comments" : { },
     "n_iterations" : 10,
     "rewiners" : [ ]
+  },
+  "5" : {
+    "id" : 5,
+    "author" : "b",
+    "title" : "nuovo post",
+    "content" : "contenuto",
+    "upvote" : [ "a" ],
+    "downvote" : [ ],
+    "comments" : {
+      "a" : [ "bello!" ]
+    },
+    "n_iterations" : 22,
+    "rewiners" : [ ]
   }
 }

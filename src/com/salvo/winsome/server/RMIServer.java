@@ -48,12 +48,11 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
 
         for (String s : tags){
             ArrayList<String> tagUser;
+            allTagsWriteLock.lock();
             if((tagUser = allTags.get(s)) != null) { // esiste almeno un utente registrato con il tag s
-                allTagsWriteLock.lock();
                 // aggiungo il nuovo utente alla lista degli utenti associati al tag
                 tagUser.add(username);
 
-                allTagsWriteLock.unlock();
 
             }else{
                 // nuova entry
@@ -63,6 +62,7 @@ public class RMIServer extends RemoteServer implements RMIServerInterface {
                 allTags.put(s,tagUser);
 
             }
+            allTagsWriteLock.unlock();
 
 
             System.out.println(s);
